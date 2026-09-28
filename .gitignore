@@ -1,0 +1,18 @@
+# Dependências e arquivos locais — não subir
+node_modules/
+
+# Banco de dados local (contém pedidos com dados dos clientes e hash de senha)
+data/
+
+# Configurações/senhas
+.env
+.env.*
+*.local
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Logs e artefatos locais
+*.log
+erro.txt

@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Produto - Cardápio Digital</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#d90429">
+<link rel="icon" href="data:,">
+
+<script>
+(function(){try{
+  var t = localStorage.getItem('bebidas_cardapio_v6_theme') || 'light';
+  document.documentElement.setAttribute('data-theme', t);
+}catch(e){
+  document.documentElement.setAttribute('data-theme','light');
+}})();
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Yanone+Kaffeesatz:wght@500;600;700&family=Cuprum:wght@400;500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/style.css?v=5">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<style>
+/* =========================================================
+   ADMIN
+========================================================= */
+body:has(.admin-view.active) .client-only-store-header{display:none !important;}
+body:has(.admin-view.active) .client-only-footer{display:none !important;}
+
+.admin-view.active{height:100vh; min-height:100vh; overflow:hidden;}
+.admin-view.active .admin-sidebar{
+  position:fixed; left:0; top:0; bottom:0;
+  width:250px; height:100vh; min-height:100vh; max-height:100vh;
+  overflow-y:auto; overflow-x:hidden; z-index:80;
+}
+.admin-view.active .admin-main{
+  margin-left:250px; width:calc(100% - 250px);
+  height:100vh; min-height:100vh; overflow:hidden;
+  display:flex; flex-direction:column;
+}
+.admin-view.active .admin-top{
+  flex-shrink:0; position:relative; top:auto; z-index:20;
+}
+.admin-view.active .admin-body{
+  height:calc(100vh - 65px); min-height:0;
+  overflow-y:auto; overflow-x:hidden; padding:24px; flex:1;
+}
+
+@media (max-width:900px){
+  .admin-view.active{height:100vh; min-height:100vh; overflow:hidden;}
+  .admin-view.active .admin-sidebar{
+    position:fixed; left:0; top:0; bottom:0;
+    width:250px; height:100vh; min-height:100vh; max-height:100vh;
+    overflow-y:auto; overflow-x:hidden; z-index:80;
+  }
+  .admin-view.active .admin-main{
+    margin-left:0; width:100%; height:100vh; min-height:100vh; overflow:hidden;
+  }
+  .admin-view.active .admin-body{
+    height:calc(100vh - 61px); min-height:0;
+    overflow-y:auto; overflow-x:hidden; padding:16px;
+  }
+  .admin-view.active .admin-top{position:relative; top:auto; flex-shrink:0;}
+}
+
+@media (max-width:480px){
+  .admin-view.active .admin-body{height:calc(100vh - 57px); padding:12px;}
+}
+
+.admin-view.active .admin-sidebar::-webkit-scrollbar{width:7px;}
+.admin-view.active .admin-sidebar::-webkit-scrollbar-thumb{
+  border-radius:10px; background:rgba(0,0,0,.18);
+}
+.admin-view.active .admin-sidebar::-webkit-scrollbar-track{background:transparent;}
+
+.admin-view.active .admin-body::-webkit-scrollbar{width:8px;}
+.admin-view.active .admin-body::-webkit-scrollbar-thumb{
+  border-radius:10px; background:rgba(0,0,0,.18);
+}
+.admin-view.active .admin-body::-webkit-scrollbar-track{background:transparent;}
+</style>
+
+</head>
+
+<body>
+
+<div class="page-loader" id="pageLoader">
+  <div class="spinner"></div>
+  <p id="loaderMsg">Carregando cardápio...</p>
+</div>
+
+<div class="topbar" id="topbar">
+  <span class="st" id="statusBar">Aberto e aceitando pedidos</span>
+  <span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+    <span id="serverState" class="on">online</span>
+    <button class="icon-btn sm top" id="btnTheme" title="Modo claro/escuro">🌙</button>
+    <button class="icon-btn sm top" id="btnShare" title="Compartilhar cardápio">🔗</button>
+    <button class="icon-btn sm top" id="btnPrint" title="Imprimir / PDF">🖨️</button>
+    <span id="topbarContact">📞 (85) 98570-8628 &nbsp;|&nbsp; @produto.exemplo</span>
+  </span>
+</div>
+
+<div class="hero client-only-store-header" id="clientStoreHeader">
+  <img class="hero-banner" id="heroBanner" alt="" hidden>
+  <h1 id="heroName">🥤 Produto</h1>
+  <p id="heroSlogan">Sua loja de produtos</p>
+  <div class="meta" id="heroMeta">
+    <span id="heroMin" hidden></span>
+    <span id="heroTime" hidden></span>
+  </div>
+</div>
+
+<header class="sticky" id="stickyHeader">
+  <nav class="cat-chips" id="catChips" aria-label="Categorias"></nav>
+  <div class="sticky-row">
+    <input type="text" id="searchInput" placeholder="🔎 O que você procura?" autocomplete="off" data-lpignore="true" data-form-type="other" spellcheck="false">
+    <button class="admin-btn" id="btnAdmin" title="Abrir painel do admin">Admin</button>
+    <button class="icon-btn" id="btnOpenCart" title="Carrinho">
+      🛒
+      <span class="badge-count hidden" id="cartCount">0</span>
+    </button>
+  </div>
+</header>
+
+<main class="menu-view" id="viewMenu">
+  <div id="bannerArea"></div>
+  <nav class="cat-menu" id="catNav"></nav>
+</main>
+
+<div class="admin-view" id="viewAdmin">
+
+  <aside class="admin-sidebar" id="admin-sidebar">
+    <div class="sb-brand">
+      <span class="sb-logo">⚙️</span>
+      <div>
+        <strong id="sbStoreName">Painel Administrativo</strong>
+        <small>Painel Administrativo</small>
+      </div>
+    </div>
+
+    <nav class="sb-nav">
+      <button class="sb-item active" data-tab="dash"><span class="sb-ico">📊</span>Dashboard</button>
+      <button class="sb-item" data-tab="prod"><span class="sb-ico">🥤</span>Produto<span class="sb-badge" id="sbBadgeProd">0</span></button>
+      <button class="sb-item" data-tab="cat"><span class="sb-ico">📂</span>Categorias</button>
+      <button class="sb-item" data-tab="ped"><span class="sb-ico">📋</span>Pedidos<span class="sb-badge sb-badge-alert" id="sbBadgePed">0</span></button>
+      <button class="sb-item" data-tab="clientes"><span class="sb-ico">👥</span>Clientes<span class="sb-badge" id="sbBadgeClientes">0</span></button>
+      <button class="sb-item" data-tab="entregas"><span class="sb-ico">🛵</span>Entregas<span class="sb-badge" id="sbBadgeEntregas">0</span></button>
+      <button class="sb-item" data-tab="rel"><span class="sb-ico">📈</span>Relatórios</button>
+      <button class="sb-item" data-tab="cup"><span class="sb-ico">🎟️</span>Cupons</button>
+      <button class="sb-item" data-tab="bair"><span class="sb-ico">🚚</span>Frete</button>
+      <button class="sb-item" data-tab="estoque"><span class="sb-ico">📦</span>Estoque</button>
+      <button class="sb-item" data-tab="log"><span class="sb-ico">📝</span>Atividades</button>
+      <button class="sb-item" data-tab="cfg"><span class="sb-ico">🔧</span>Configurações</button>
+      <button class="sb-item" data-tab="sec"><span class="sb-ico">🔐</span>Segurança</button>
+    </nav>
+
+    <div class="sb-footer">
+      <button class="btn ghost full sm" id="btnLogout">🚪 Sair</button>
+    </div>
+  </aside>
+
+  <div class="admin-main">
+    <header class="admin-top">
+      <button class="admin-toggle" id="btnAdminToggle" title="Abrir menu de abas">☰ Menu</button>
+      <h2 id="adminPageTitle">Dashboard</h2>
+      <div class="admin-actions">
+        <span class="admin-clock" id="adminClock">--:--</span>
+        <button class="btn ghost sm" id="btnBackToMenu" title="Sair do painel e voltar ao cardápio">🚪 Sair</button>
+      </div>
+    </header>
+
+    <div class="admin-body">
+
+      <!-- DASHBOARD -->
+      <section id="tab-dash" class="admin-section active">
+        <div class="kpi-grid">
+          <div class="kpi">
+            <div class="kpi-ico" style="background:#e0f7ee;color:#06a77d">💰</div>
+            <div><small>Vendas hoje</small><strong id="kpiHoje">R$ 0,00</strong><span class="kpi-sub" id="kpiHojeSub">0 pedidos</span></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-ico" style="background:#e6f0ff;color:#3b82f6">📋</div>
+            <div><small>Pedidos pendentes</small><strong id="kpiPend">0</strong><span class="kpi-sub" id="kpiPendSub">aguardando</span></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-ico" style="background:#fff4e0;color:#f59e0b">⚠️</div>
+            <div><small>Estoque baixo</small><strong id="kpiLow">0</strong><span class="kpi-sub">produtos</span></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-ico" style="background:#ffe9ec;color:#d90429">🥤</div>
+            <div><small>Produtos ativos</small><strong id="kpiProd">0</strong><span class="kpi-sub" id="kpiProdSub">0 categorias</span></div>
+          </div>
+        </div>
+
+        <div class="dash-grid">
+          <div class="dash-card">
+            <div class="dash-head">
+              <h3>📈 Vendas (últimos 7 dias)</h3>
+              <span class="dash-tag" id="dashTotal7">R$ 0,00</span>
+            </div>
+            <div class="chart" id="chartVendas"></div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-head"><h3>🔥 Top 5 produtos</h3></div>
+            <div id="dashTop" class="dash-list"></div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-head"><h3>🚨 Alertas de estoque</h3>
+              <button class="btn sm ghost" id="dashGoEstoque">Ver tudo</button></div>
+            <div id="dashAlertas" class="dash-list"></div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-head"><h3>📋 Últimos pedidos</h3>
+              <button class="btn sm ghost" id="dashGoPed">Ver todos</button></div>
+            <div id="dashUltimos" class="dash-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PRODUTOS -->
+      <section id="tab-prod" class="admin-section">
+        <div class="section-head">
+          <div class="section-title-block">
+            <h2>🥤 Produto</h2>
+            <p>Gerencie os produtos do cardápio</p>
+          </div>
+          <div class="section-actions">
+            <button class="btn ghost sm" id="btnExportCsv">📤 Exportar</button>
+            <button class="btn ghost sm" id="btnImportCsv">📥 Importar</button>
+            <input type="file" id="fileImportCsv" accept=".csv" hidden>
+            <button class="btn primary" id="btnNew">➕ Novo Produto</button>
+          </div>
+        </div>
+        <div class="filter-bar">
+          <input type="text" id="prodFilter" placeholder="🔎 Filtrar por nome...">
+          <select id="prodCatFilter"><option value="">Todas categorias</option></select>
+          <select id="prodStockFilter">
+            <option value="">Todos os estoques</option>
+            <option value="low">⚠️ Estoque baixo</option>
+            <option value="out">❌ Esgotados</option>
+          </select>
+          <select id="prodStatusFilter">
+            <option value="">Todos os status</option>
+            <option value="active">✅ Ativos</option>
+            <option value="inactive">🚫 Inativos</option>
+            <option value="highlight">⭐ Destaques</option>
+            <option value="promo">🔥 Promoções</option>
+          </select>
+        </div>
+        <div class="bulk-bar hidden" id="bulkProd">
+          <span id="bulkProdCount">0 selecionados</span>
+          <button class="btn sm danger" id="bulkDeleteProd">🗑 Excluir</button>
+          <button class="btn sm warning" id="bulkDeactivateProd">🚫 Desativar</button>
+          <button class="btn sm success" id="bulkActivateProd">✅ Ativar</button>
+          <button class="btn sm ghost" id="bulkClearProd">Cancelar</button>
+        </div>
+        <div class="table-wrap">
+          <table class="modern">
+            <thead>
+              <tr>
+                <th style="width:36px"><input type="checkbox" id="checkAllProd"></th>
+                <th>Produto</th><th>Categoria</th><th>Preço</th>
+                <th>Estoque</th><th>Status</th>
+                <th style="width:130px">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tblProd"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- CATEGORIAS -->
+      <section id="tab-cat" class="admin-section">
+        <div class="section-head">
+          <div class="section-title-block">
+            <h2>📂 Categorias</h2>
+            <p>Organize as categorias do cardápio</p>
+          </div>
+          <button class="btn primary" id="btnNewCat">➕ Nova Categoria</button>
+        </div>
+        <div class="table-wrap">
+          <table class="modern">
+            <thead>
+              <tr><th>Nome</th><th>Emoji</th><th>Produtos</th><th>Ordem</th>
+              <th style="width:200px">Ações</th></tr>
+            </thead>
+            <tbody id="tblCat"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PEDIDOS (kanban nativo do admin-orders.js) -->
+      <section id="tab-ped" class="admin-section">
+        <div class="section-head">
+          <div class="section-title-block">
+            <h2>📋 Pedidos</h2>
+            <p>Gerencie os pedidos recebidos</p>
+          </div>
+          <div class="section-actions">
+            <div id="pedViewSwitch" class="view-switch" role="group" aria-label="Visualização de pedidos">
+              <button class="view-switch-btn active" data-view="list">📋 Lista</button>
+              <button class="view-switch-btn" data-view="kanban">🗂 Kanban</button>
+            </div>
+            <input type="text" id="pedFilter" placeholder="🔎 Buscar..." class="input-sm" style="max-width:200px">
+            <select id="pedStatusFilter" class="input-sm" style="max-width:160px">
+              <option value="">Todos status</option>
+              <option value="pendente">🕐 Pendente</option>
+              <option value="preparando">👨‍🍳 Preparando</option>
+              <option value="entregando">🛵 Entregando</option>
+              <option value="entregue">✅ Entregue</option>
+              <option value="cancelado">❌ Cancelado</option>
+            </select>
+            <select id="pedPeriodFilter" class="input-sm" style="max-width:160px">
+              <option value="">Todo período</option>
+              <option value="today">Hoje</option>
+              <option value="7d">Últimos 7 dias</option>
+              <option value="30d">Últimos 30 dias</option>
+            </select>
+          </div>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi"><div class="kpi-ico" style="background:#fff4e0;color:#f59e0b">🕐</div><div><small>Pendentes</small><strong id="cntPend">0</strong></div></div>
+          <div class="kpi"><div class="kpi-ico" style="background:#e6f0ff;color:#3b82f6">👨‍🍳</div><div><small>Preparando</small><strong id="cntPrep">0</strong></div></div>
+          <div class="kpi"><div class="kpi-ico" style="background:#f5e6ff;color:#8b5cf6">🛵</div><div><small>Entregando</small><strong id="cntEntr">0</strong></div></div>
+          <div class="kpi"><div class="kpi-ico" style="background:#e0f7ee;color:#06a77d">✅</div><div><small>Entregues</small><strong id="cntFim">0</strong></div></div>
+        </div>
+        <div id="pedViewList" class="ped-view active">
+          <div class="table-wrap">
+            <table class="modern">
+              <thead>
+                <tr>
+                  <th>Pedido</th>
+                  <th>Cliente</th>
+                  <th>Itens</th>
+                  <th>Total</th>
+                  <th>Frete</th>
+                  <th>Status</th>
+                  <th style="width:150px">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="tblPed"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="pedViewKanban" class="ped-view" aria-label="Kanban de pedidos">
+          <div class="ped-kanban">
+            <div class="kanban-col" data-status="pendente">
+              <div class="kanban-col-head"><span class="status-pill s-pendente">🕐 Pendente</span><span class="kanban-count" id="kanbanCountPendente">0</span></div>
+              <div class="kanban-col-body" id="kanbanPendente" data-status="pendente"></div>
+            </div>
+            <div class="kanban-col" data-status="preparando">
+              <div class="kanban-col-head"><span class="status-pill s-preparando">👨‍🍳 Preparando</span><span class="kanban-count" id="kanbanCountPreparando">0</span></div>
+              <div class="kanban-col-body" id="kanbanPreparando" data-status="preparando"></div>
+            </div>
+            <div class="kanban-col" data-status="entregando">
+              <div class="kanban-col-head"><span class="status-pill s-entregando">🛵 Entregando</span><span class="kanban-count" id="kanbanCountEntregando">0</span></div>
+              <div class="kanban-col-body" id="kanbanEntregando" data-status="entregando"></div>
+            </div>
+            <div class="kanban-col" data-status="entregue">
+              <div class="kanban-col-head"><span class="status-pill s-entregue">✅ Entregue</span><span class="kanban-count" id="kanbanCountEntregue">0</span></div>
+              <div class="kanban-col-body" id="kanbanEntregue" data-status="entregue"></div>
+            </div>
+            <div class="kanban-col" data-status="cancelado">
+              <div class="kanban-col-head"><span class="status-pill s-cancelado">❌ Cancelado</span><span class="kanban-count" id="kanbanCountCancelado">0</span></div>
+              <div class="kanban-col-body" id="kanbanCancelado" data-status="cancelado"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CLIENTES -->
+      <section id="tab-clientes" class="admin-section">
+        <div class="section-head">
+          <div class="section-title-block">
+            <h2>👥 Clientes</h2><p>Clientes que já realizaram pedidos</p>
+          </div>
+          <div class="section-actions">
+            <button class="btn ghost sm" id="btnAtualizarClientes">🔄 Atualizar</button>
+          </div>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi"><div class="kpi-ico" style="background:#e6f0ff;color:#3b82f6">👥</div>
+            <div><small>Clientes</small><strong id="clientesTotal">0</strong></div></div>
+          <div class="kpi"><div class="kpi-ico" style="background:#e0f7ee;color:#06a77d">💰</div>
+            <div><small>Faturamento</small><strong id="clientesFaturamento">R$ 0,00</strong></div></div>
+          <div class="kpi"><div class="kpi-ico" style="background:#fff4e0;color:#f59e0b">🔁</div>
+            <div><small>Clientes recorrentes</small><strong id="clientesRecorrentes">0</strong></div></div>
+          <div class="kpi"><div class="kpi-ico" style="background:#ffe9ec;color:#d90429">🛒</div>
+            <div><small>Ticket médio</small><strong id="clientesTicket">R$ 0,00</strong></div></div>
+        </div>
+        <div class="filter-bar">
+          <input type="text" id="clientesFilter" placeholder="🔎 Buscar nome, telefone ou endereço...">
+          <select id="clientesOrder">
+            <option value="recent">Mais recentes</option>
+            <option value="orders">Mais pedidos</option>
+            <option value="value">Maior valor gasto</option>
+            <option value="name">Nome A-Z</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="modern">
+            <thead>
+              <tr><th>Cliente</th><th>Telefone</th><th>Pedidos</th>
+              <th>Total gasto</th><th>Último pedido</th>
+              <th style="width:130px">Ações</th></tr>
+            </thead>
+            <tbody id="tblClientes"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ENTREGAS -->
+      <section id="tab-entregas" class="admin-section">
+        <div class="section-head">
+          <div class="section-title-block">
+            <h2>🛵 Entregas</h2>
+            <p>Acompanhe os pedidos que estão sendo entregues</p>
+          </div>
+          <div class="section-actions">
+            <button class="btn ghost sm" id="btnAtualizarEntregas">🔄 Atualizar</button>
+          </div>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi"><div class="kpi-ico" style="background:#e6f0ff;color:#3b82f6">📦</div>
+            <div><small>Aguardando entrega</small><strong id="entregasAguardando">0</strong></div></div>
+          <div class="kpi"><div class="kpi-ico" style="background:#f5e6ff;color:#8b5cf6">🛵</div>
+            <div><small>Em entrega</small><strong id="entregasEmEntrega">0</strong></div></div>
+          <div class="kpi"><div class="kpi-ico" style="background:#e0f7ee;color:#06a77d">✅</div>
+            <div><small>Entregues</small><strong id="entregasFinalizadas">0</strong></div></div>
+          <div class="kpi"><div class="kpi-ico" style="background:#fff4e0;color:#f59e0b">🚚</div>
+            <div><small>Total</small><strong id="entregasTotal">0</strong></div></div>
+        </div>
+        <div class="filter-bar">
+          <input type="text" id="entregasFilter" placeholder="🔎 Buscar pedido, cliente ou telefone...">
+          <select id="entregasStatusFilter">
+            <option value="">Todos os status</option>
+            <option value="pronto">🟢 Pronto para entrega</option>
+            <option value="entregando">🟣 Em entrega</option>
+            <option value="entregue">✅ Entregue</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="modern">
+            <thead>
+              <tr><th>Pedido</th><th>Cliente</th><th>Endereço</th>
+              <th>Telefone</th><th>Total</th><th>Status</th>
+              <th style="width:180px">Ações</th></tr>
+            </thead>
+            <tbody id="tblEntregas"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- RELATÓRIOS -->
+      <section id="tab-rel" class="admin-section">
+        <div class="section-head">
+          <div class="section-title-block">
+            <h2>📈 Relatórios</h2><p>Análises de desempenho</p>
+          </div>
+          <div class="section-actions">
+            <select id="relPeriod" class="btn ghost sm" style="padding:8px">
+              <option value="7d">Últimos 7 dias</option>
+              <option value="30d">Últimos 30 dias</option>
+              <option value="all">Todo período</option>
+            </select>
+            <button class="btn ghost sm" id="btnExportRel">📤 Exportar CSV</button>
+          </div>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi"><div class="kpi-ico" style="background:#e0f7ee;color:#06a77d">💰</div>
+            <div><small>Vendas no período</small><strong id="relVendas">R$ 0</strong></div></div>
+          <div class="kpi"><div class="kpi-ico" style="background:#e6f0ff;color:#3b82f6">📋</div>
+            <div><small>Pedidos</small><strong id="relPedidos">0</strong></div></div>
+          <div class="kpi"><div class="kpi-ico" style="background:#fff4e0;color:#f59e0b">🎯</div>
+            <div><small>Ticket médio</small><strong id="relTicket">R$ 0</strong></div></div>
+          <div class="kpi"><div class="kpi-ico" style="background:#f5e6ff;color:#8b5cf6">🚚</div>
+            <div><small>Receita de frete</small><strong id="relFrete">R$ 0</strong></div></div>
+          <div class="kpi"><div class="kpi-ico" style="background:#fef9c3;color:#ca8a04">📈</div>
+            <div><small>Lucro estimado</small><strong id="relLucro">R$ 0</strong></div></div>
+        </div>
+        <div class="dash-grid">
+          <div class="dash-card"><div class="dash-head"><h3>🏆 Mais vendidos</h3></div>
+            <div id="relTop" class="dash-list"></div></div>
+          <div class="dash-card"><div class="dash-head"><h3>💳 Formas de pagamento</h3></div>
+            <div id="relPag" class="dash-list"></div></div>
+          <div class="dash-card"><div class="dash-head"><h3>🚚 Tipos de entrega</h3></div>
+            <div id="relTipo" class="dash-list"></div></div>
+          <div class="dash-card"><div class="dash-head"><h3>🎟️ Cupons utilizados</h3></div>
+            <div id="relCupons" class="dash-list"></div></div>
+          <div class="dash-card"><div class="dash-head"><h3>📊 Curva ABC (produtos)</h3></div>
+            <div id="relABC" class="dash-list"></div></div>
+          <div class="dash-card" style="grid-column:1/-1">
+            <div class="dash-head"><h3>📅 Vendas por dia (período)</h3></div>
+            <div id="relDias" class="dash-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CUPONS -->
+      <section id="tab-cup" class="admin-section">
+        <div class="section-head">
+          <div class="section-title-block"><h2>🎟️ Cupons</h2><p>Códigos de desconto</p></div>
+          <button class="btn primary" id="btnNewCoupon">➕ Novo Cupom</button>
+        </div>
+        <div class="table-wrap">
+          <table class="modern">
+            <thead>
+              <tr><th>Código</th><th>Desconto</th><th>Mín.</th>
+              <th>Usos</th><th>Status</th><th style="width:200px">Ações</th></tr>
+            </thead>
+            <tbody id="tblCup"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- FRETE -->
+      <section id="tab-bair" class="admin-section">
+        <div class="section-head">
+          <div class="section-title-block"><h2>🚚 Frete e Regiões</h2><p>Gerencie as taxas de entrega</p></div>
+          <button class="btn primary" id="btnNewBairro">➕ Novo Bairro</button>
+        </div>
+        <div class="frete-info">
+          <div class="frete-card"><small>Modo atual</small><strong id="freteModeLabel">Fixo</strong></div>
+          <div class="frete-card"><small>Taxa base</small><strong id="freteValLabel">R$ 0,00</strong></div>
+          <div class="frete-card"><small>Frete grátis acima de</small><strong id="freteGratisLabel">—</strong></div>
+        </div>
+        <div class="table-wrap">
+          <table class="modern">
+            <thead><tr><th>Bairro</th><th>Taxa</th><th>KM aprox.</th><th style="width:200px">Ações</th></tr></thead>
+            <tbody id="tblBairros"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ESTOQUE -->
+      <section id="tab-estoque" class="admin-section">
+        <div class="section-head">
+          <div class="section-title-block"><h2>📦 Controle de Estoque</h2><p>Ajuste rápido e histórico</p></div>
+        </div>
+        <div class="filter-bar">
+          <input type="text" id="estoqueFilter" placeholder="🔎 Filtrar produto...">
+          <select id="estoqueStatusFilter">
+            <option value="all">Todos</option>
+            <option value="low">⚠️ Baixo estoque</option>
+            <option value="out">❌ Esgotados</option>
+            <option value="ok">✅ OK</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="modern">
+            <thead>
+              <tr><th>Produto</th><th>Estoque atual</th><th>Ajuste rápido</th>
+              <th style="width:150px">Ações</th></tr>
+            </thead>
+            <tbody id="tblEstoque"></tbody>
+          </table>
+        </div>
+        <div class="section-head" style="margin-top:24px">
+          <div class="section-title-block"><h3>📜 Histórico recente</h3></div>
+          <button class="btn ghost sm" id="btnClearStockLog">🗑 Limpar</button>
+        </div>
+        <div id="stockLog" class="dash-list"></div>
+      </section>
+
+      <!-- LOG -->
+      <section id="tab-log" class="admin-section">
+        <div class="section-head">
+          <div class="section-title-block"><h2>📝 Atividades do Admin</h2>
+            <p>Últimas 100 ações registradas</p></div>
+          <button class="btn danger sm" id="btnClearLog">🗑 Limpar log</button>
+        </div>
+        <div id="adminLog" class="log-list"></div>
+      </section>
+
+      <!-- CONFIGURAÇÕES -->
+      <section id="tab-cfg" class="admin-section">
+        <div class="section-head">
+          <div class="section-title-block"><h2>🔧 Configurações da Loja</h2>
+            <p>Informações gerais, frete e aparência</p></div>
+        </div>
+        <div class="cfg-grid">
+          <div class="cfg-card">
+            <h3>🏪 Identidade</h3>
+            <div class="form-group"><label>Nome da Loja</label><input id="cName"></div>
+            <div class="form-group">
+              <label>Banner (opcional)</label>
+              <input id="cBannerUrl" placeholder="assets/banner.jpg, https://... ou data:">
+              <div class="coords-actions" style="margin-top:6px">
+                <button type="button" class="btn ghost sm" id="btnBannerPick">🖼️ Escolher imagem</button>
+                <button type="button" class="btn ghost sm" id="btnBannerClear">🗑️ Remover</button>
+              </div>
+              <input type="file" id="cBannerFile" accept="image/*" style="display:none">
+              <div class="banner-preview" id="cBannerPreview"></div>
+            </div>
+            <div class="form-group"><label>Slogan</label><input id="cSlogan"></div>
+            <div class="form-row">
+              <div class="form-group"><label>WhatsApp</label><input id="cWpp"></div>
+              <div class="form-group"><label>Telefone exibido</label><input id="cPhone"></div>
+            </div>
+            <div class="form-group"><label>Instagram (apenas @usuario)</label><input id="cInsta" placeholder="bebidasexemplo"></div>
+            <div class="form-row">
+              <div class="form-group" style="flex:3"><label>Rua</label><input id="cStreet" placeholder="Rua Santa Helena"></div>
+              <div class="form-group" style="flex:1"><label>Número</label><input id="cNumber" placeholder="410b"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex:2"><label>Bairro</label><input id="cDistrict" placeholder="Pajuçara"></div>
+              <div class="form-group" style="flex:2"><label>Cidade</label><input id="cCity" placeholder="Cidade"></div>
+              <div class="form-group" style="flex:1"><label>CEP</label><input id="cZip" inputmode="numeric" autocomplete="off" maxlength="9" placeholder="00000-000"></div>
+            </div>
+          </div>
+          <div class="cfg-card">
+            <h3>⏰ Funcionamento</h3>
+            <div class="form-row">
+              <div class="form-group"><label>Abertura</label><input type="time" id="cOpenTime" value="18:00"></div>
+              <div class="form-group"><label>Fechamento</label><input type="time" id="cCloseTime" value="23:00"></div>
+            </div>
+            <div class="form-group"><label>Dias de funcionamento</label><input id="cDays" placeholder="Seg, Ter, Qua, Qui, Sex, Sáb, Dom"></div>
+            <div class="form-row">
+              <div class="form-group"><label>Pedido mínimo (R$)</label><input type="number" id="cMin" step="0.01"></div>
+              <div class="form-group"><label>Tempo de entrega</label><input id="cTime" placeholder="30-45 min"></div>
+            </div>
+          </div>
+          <div class="cfg-card">
+            <h3>🚚 Frete</h3>
+            <div class="form-row">
+              <div class="form-group"><label>Modo</label>
+                <select id="cFreteMode">
+                  <option value="fixo">Fixo (R$)</option>
+                  <option value="km">Por KM</option>
+                  <option value="bairro">Por Bairro</option>
+                  <option value="gratis">Grátis</option>
+                </select>
+              </div>
+              <div class="form-group"><label>Taxa fixa (R$)</label><input type="number" id="cFreteFixo" step="0.01"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label>Valor por KM (R$)</label><input type="number" id="cFreteKmVal" step="0.01"></div>
+              <div class="form-group"><label>KM para frete grátis</label><input type="number" id="cFreteKmGratis" step="0.01"></div>
+            </div>
+            <div class="form-group"><label>Frete grátis acima de (R$)</label><input type="number" id="cFreteGratisAcima" step="0.01"></div>
+            <div class="form-group store-loc-block">
+              <label>Local da loja (lat, lng)</label>
+              <input id="cCoords" placeholder="ex.: -3.743280, -38.523085">
+              <small class="field-hint">Usado como ponto de partida para calcular o frete por KM. Precisa ser o endereço da loja, não o seu.</small>
+              <div class="coords-actions">
+                <button type="button" class="btn ghost sm" id="btnGeoCep">🔎 Buscar pelo CEP</button>
+                <button type="button" class="btn ghost sm" id="btnGeoStore">🔎 Buscar pelo endereço</button>
+                <button type="button" class="btn ghost sm" id="btnLocAdmin">📍 Usar minha posição atual</button>
+                <a class="btn ghost sm" id="cMapLink" target="_blank" rel="noopener">🗺️ Ver no Google Maps</a>
+              </div>
+              <p class="field-hint" id="cGeoResult" hidden></p>
+              <p class="field-hint warn" id="cCoordsWarn" hidden></p>
+            </div>
+          </div>
+          <div class="cfg-card">
+            <h3>💰 Pagamentos</h3>
+            <div class="form-group"><label>Formas aceitas (separadas por vírgula)</label><input id="cPay"></div>
+            <div class="form-group"><label>Chave PIX</label><input id="cPix" placeholder="CPF, CNPJ, celular, e-mail ou aleatória"></div>
+            <div class="form-row">
+              <div class="form-group"><label>Nome do recebedor (PIX)</label><input id="cPixName"></div>
+              <div class="form-group"><label>Cidade (PIX)</label><input id="cPixCity"></div>
+            </div>
+            <small class="field-hint">Com a chave preenchida, o cliente vê o QR Code PIX.</small>
+          </div>
+          <div class="cfg-card">
+            <h3>🛡️ Regras da loja</h3>
+            <div class="form-group">
+              <label><input type="checkbox" id="cBlockClosed"> Bloquear pedidos fora do horário</label>
+            </div>
+            <div class="form-group">
+              <label><input type="checkbox" id="cRequireAge"> Pedir +18 para produtos alcoólicos</label>
+              <small class="field-hint">Identifica por nome/categoria ou pela marcação no produto.</small>
+            </div>
+          </div>
+          <div class="cfg-card">
+            <h3>📦 Estoque</h3>
+            <div class="form-group"><label>Estoque mínimo (alerta)</label><input type="number" id="cMinStock"></div>
+            <div class="form-group">
+              <label><input type="checkbox" id="cBlockOutOfStock"> Bloquear venda de esgotados</label>
+            </div>
+          </div>
+          <div class="cfg-card">
+            <h3>🎨 Aparência</h3>
+            <div class="preset-grid" id="themePresets"></div>
+            <div class="form-row">
+              <div class="form-group"><label>Cor primária</label><input type="color" id="cColor1" value="#d90429"></div>
+              <div class="form-group"><label>Cor secundária</label><input type="color" id="cColor2" value="#a50320"></div>
+            </div>
+            <div class="form-group">
+              <label><input type="checkbox" id="cShowBanner"> Mostrar banner de últimas unidades</label>
+            </div>
+            <div class="form-group"><label>Formato do banner de aviso</label>
+              <select id="cBannerShape">
+                <option value="square">Quadrado (cantos retos)</option>
+                <option value="round">Redondo (cantos arredondados)</option>
+              </select>
+              <small class="field-hint">Aplicado aos avisos do cardápio (ex.: loja fechada).</small>
+              <div class="banner-shape-previews" aria-hidden="true">
+                <i class="pv-square"></i>
+                <i class="pv-round"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cfg-actions">
+          <button class="btn primary" id="btnSaveCfg">💾 Salvar Configurações</button>
+        </div>
+      </section>
+
+      <!-- SEGURANÇA -->
+      <section id="tab-sec" class="admin-section">
+        <div class="section-head">
+          <div class="section-title-block"><h2>🔐 Segurança</h2>
+            <p>Senha, backup e zona de perigo</p></div>
+        </div>
+        <div class="cfg-grid">
+          <div class="cfg-card">
+            <h3>🔑 Senha do Admin</h3>
+            <div class="form-group"><label>Senha atual</label><input type="password" id="secOldPass"></div>
+            <div class="form-row">
+              <div class="form-group"><label>Nova senha</label><input type="password" id="secNewPass"></div>
+              <div class="form-group"><label>Confirmar</label><input type="password" id="secConfirmPass"></div>
+            </div>
+            <button class="btn primary" id="btnSavePass">🔐 Alterar Senha</button>
+            <p class="hint">💡 A senha é exigida a cada entrada no painel.</p>
+          </div>
+          <div class="cfg-card">
+            <h3>💾 Backup</h3>
+            <p class="hint">Baixe um ZIP com todos os dados da loja.</p>
+            <button class="btn ghost full" id="btnBackup">💾 Baixar backup (ZIP)</button>
+            <button class="btn ghost full" id="btnRestore" style="margin-top:8px">📂 Restaurar backup</button>
+            <input type="file" id="fileRestore" accept=".zip" hidden>
+          </div>
+          <div class="cfg-card">
+            <h3>🔄 Backups Automáticos</h3>
+            <p class="hint">Snapshots salvos no navegador a cada 6 horas.</p>
+            <label class="tap-row" style="display:flex;align-items:center;gap:8px;margin:10px 0">
+              <input type="checkbox" id="cAutoBackup" checked> Backup automático ativado
+            </label>
+            <div id="autoBackupsList" class="dash-list" style="border:1px solid var(--border);border-radius:10px;padding:8px;font-size:.85rem"></div>
+            <div class="form-row" style="margin-top:10px">
+              <button class="btn sm primary" id="btnBackupNow">💾 Fazer agora</button>
+              <button class="btn sm ghost" id="btnClearBackups">🗑 Apagar</button>
+            </div>
+          </div>
+          <div class="cfg-card danger-card">
+            <h3>⚠️ Zona de Perigo</h3>
+            <button class="btn danger full" id="btnClearOrders">🗑 Apagar todos os pedidos</button>
+            <button class="btn danger full" id="btnClearCart" style="margin-top:8px">🧹 Limpar carrinhos abertos</button>
+            <button class="btn danger full" id="btnResetAll" style="margin-top:8px">💣 Resetar tudo</button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- MODAIS -->
+<div class="overlay center" id="overlayLogin">
+  <div class="sheet" style="max-width:420px">
+    <div class="login-head">
+      <div class="login-logo">🔐</div>
+      <h2>Acesso Restrito</h2>
+      <p id="loginSub">Digite a senha para acessar o painel administrativo.</p>
+    </div>
+    <div class="form-group">
+      <label>Senha</label>
+      <input type="password" id="loginPass" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <div id="loginMsg"></div>
+    <button class="btn primary full" id="btnDoLogin" style="margin-top:8px">Entrar</button>
+    <p class="hint" style="text-align:center;margin-top:14px">Se não sabe a senha, fale com o responsável.</p>
+  </div>
+</div>
+
+<div class="overlay center" id="overlayOrderDetail">
+  <div class="sheet" style="max-width:560px" id="sheetOrderDetail"></div>
+</div>
+
+<div class="overlay center" id="overlayCliente">
+  <div class="sheet" style="max-width:600px">
+    <div class="close-row">
+      <h2>👤 Detalhes do Cliente</h2>
+      <button class="btn ghost" data-close>✕</button>
+    </div>
+    <div id="clienteDetalhe"></div>
+  </div>
+</div>
+
+<div class="overlay center" id="overlayEntrega">
+  <div class="sheet" style="max-width:600px">
+    <div class="close-row">
+      <h2>🛵 Detalhes da Entrega</h2>
+      <button class="btn ghost" data-close>✕</button>
+    </div>
+    <div id="entregaDetalhe"></div>
+  </div>
+</div>
+
+<div class="cart-bar" id="cartBar">
+  <div class="info">
+    <small id="cartInfo">0 itens</small>
+    <strong id="cartTotalBar">R$ 0,00</strong>
+  </div>
+  <button id="btnFinish">📱 Finalizar Pedido</button>
+</div>
+
+<footer class="client-only-footer">
+  <h3 id="ftName">🥤 Produto</h3>
+  <p id="ftAddress">Rua Ali-Babá, 1 - Jardim Gurilândia</p>
+  <p id="ftPhone">Telefone: (11) 98765-4321</p>
+  <a class="map-link" id="ftMapLink" target="_blank" rel="noopener" hidden>📍 Abrir mapa</a>
+  <a class="map-link" id="footerTrack" href="#acompanhar" style="border-style:dashed">🔎 Acompanhar meu pedido</a>
+  <a class="map-link" id="footerOrders" href="#" style="border-style:dashed">📦 Meus pedidos</a>
+  <p class="powered">Cardápio digital • Todos os valores em reais</p>
+</footer>
+
+<div class="overlay" id="overlayItem"><div class="sheet" id="sheetItem"></div></div>
+
+<div class="overlay" id="overlayCart">
+  <div class="sheet">
+    <div class="close-row">
+      <h2>🛒 Seu Carrinho</h2>
+      <button class="btn ghost" data-close>✕</button>
+    </div>
+    <p class="subtitle" id="cartHint">Revise os itens do seu pedido antes de continuar.</p>
+    <div id="cartLines"></div>
+    <div class="coupon-box">
+      <input type="text" id="couponInput" placeholder="🎟️ CUPOM DE DESCONTO">
+      <button class="btn primary" id="btnApplyCoupon">Aplicar</button>
+    </div>
+    <div id="couponMsg"></div>
+    <div id="cartExtra"></div>
+    <div class="summary" id="cartSummary"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="btnCartBack">← Voltar</button>
+      <button class="btn ghost danger-text" id="btnCartExit">✕ Sair</button>
+      <button class="btn success" id="btnCheckout">Continuar →</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay center" id="overlayCheckout">
+  <div class="sheet">
+    <div class="close-row">
+      <h2>📋 Dados do Pedido</h2>
+      <button class="btn ghost" data-close>✕</button>
+    </div>
+    <div id="coItems"></div>
+    <p class="subtitle">Confira o resumo acima e preencha os dados. Campos com <b>*</b> são obrigatórios.</p>
+    <div class="form-group">
+      <label>Seu Nome *</label>
+      <input id="cNameF" autocomplete="name">
+      <small class="field-hint">Como podemos te chamar no pedido.</small>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="cTypeF"><option>Entrega</option><option>Retirada</option></select>
+        <small class="field-hint">Entrega em casa ou retirada na loja.</small>
+      </div>
+      <div class="form-group">
+        <label>Pagamento</label>
+        <select id="cPayF"></select>
+        <small class="field-hint">Forma de pagamento na entrega/retirada.</small>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Telefone (opcional)</label>
+      <input id="cPhoneF" inputmode="tel" placeholder="(85) 99999-9999">
+      <small class="field-hint">Com DDD — ajuda o entregador.</small>
+    </div>
+    <div class="form-group" id="addrWrap">
+      <label>Endereço de Entrega *</label>
+      <div class="form-row">
+        <div class="form-group" style="flex:2;min-width:0"><label>Rua</label><input id="cRuaF" autocomplete="address-line1"></div>
+        <div class="form-group" style="flex:0 0 100px"><label>Número</label><input id="cNumF" inputmode="numeric"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1;min-width:0"><label>Bairro</label><input id="cBairroNomeF" autocomplete="address-level2"></div>
+        <div class="form-group" style="flex:0 0 150px"><label>CEP (opcional)</label><input id="cCepF" inputmode="numeric" placeholder="00000-000"></div>
+      </div>
+    </div>
+    <div class="form-row" id="bairroWrap">
+      <div class="form-group">
+        <label>Bairro</label>
+        <select id="cBairroF"><option value="">— Selecione —</option></select>
+        <small class="field-hint">Define o valor do frete.</small>
+      </div>
+      <div class="form-group" id="kmWrap">
+        <label>Distância / Frete</label>
+        <input type="hidden" id="cKmF" value="">
+        <div class="dist-line" id="distLine">📍 Calculando distância...</div>
+        <button type="button" class="geo-btn" id="btnLocKm">📍 Calcular distância</button>
+        <small class="field-hint" id="cKmHint"></small>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Troco para quanto? (opcional)</label>
+      <input id="cChangeF" inputmode="decimal" placeholder="Ex: 50">
+      <small class="field-hint">Se for pagar em dinheiro e precisar de troco.</small>
+    </div>
+    <div class="form-group">
+      <label>Observações</label>
+      <textarea id="cObsF" rows="2" placeholder="Ex: casa azul, entregar no portão..."></textarea>
+      <small class="field-hint">Alguma instrução especial para a entrega?</small>
+    </div>
+    <div id="coInfo"></div>
+    <div class="summary" id="coSummary"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="btnCoBack">← Voltar</button>
+      <button class="btn ghost danger-text" id="btnCoExit">✕ Sair</button>
+      <button class="btn success" id="btnConfirm">✅ Enviar pelo WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay center" id="overlayProduct">
+  <div class="sheet" style="max-width:600px">
+    <div class="close-row">
+      <h2 id="pModalTitle">Novo Produto</h2>
+      <button class="btn ghost" data-close>✕</button>
+    </div>
+    <input type="hidden" id="pId">
+    <div class="form-row">
+      <div class="form-group" style="grid-column:1/2"><label>Nome *</label><input id="pName"></div>
+      <div class="form-group" style="grid-column:2/3">
+        <label>Categoria *</label>
+        <select id="pCat"></select>
+      </div>
+    </div>
+    <div class="form-group"><label>Descrição</label><textarea id="pDesc" rows="2"></textarea></div>
+    <div class="form-row">
+      <div class="form-group"><label>Preço (R$) *</label><input type="number" id="pPrice" step="0.01" min="0"></div>
+      <div class="form-group"><label>Preço promocional</label><input type="number" id="pPromo" step="0.01" min="0"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Estoque</label><input type="number" id="pStock" value="0" min="0"></div>
+      <div class="form-group"><label>Custo (R$)</label><input type="number" id="pCost" step="0.01" min="0"></div>
+    </div>
+    <div class="form-group">
+      <label>Foto / Imagem <small style="color:var(--muted);font-weight:400">(em branco = emoji)</small></label>
+      <div style="display:flex;gap:6px">
+        <input id="pImg" placeholder="ex.: assets/produtos/coca.jpg" style="flex:1">
+        <input type="file" id="pImgFile" accept="image/*" style="display:none">
+        <button type="button" class="btn ghost sm" id="pImgBtn">📁 Arquivo</button>
+      </div>
+      <small style="display:block;color:var(--muted);font-size:.72rem;margin-top:4px;line-height:1.3">
+        Pode ser: emoji (🥤), caminho local (assets/produtos/...) ou link (https://...jpg).
+      </small>
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+        <button type="button" class="btn ghost sm" onclick="document.getElementById('pImgFile').click()">📁 Selecionar do PC</button>
+        <button type="button" class="btn ghost sm" onclick="document.getElementById('pImgFile').click()">📱 Selecionar do Celular</button>
+      </div>
+    </div>
+    <div class="img-preview" id="pImgPreview"><span>🥤</span></div>
+    <div class="form-checks">
+      <label><input type="checkbox" id="pAge"> 🍺 Produto alcoólico (+18)</label>
+      <label><input type="checkbox" id="pFlag"> ⭐ Destaque</label>
+      <label><input type="checkbox" id="pPromoFlag"> 🔥 Promoção</label>
+      <label><input type="checkbox" id="pActiveFlag" checked> ✅ Ativo</label>
+    </div>
+    <h3 class="modal-h3">🧊 Variações / Tamanhos</h3>
+    <div id="variationList"></div>
+    <button class="btn ghost sm" id="btnAddVariation">➕ Adicionar variação</button>
+    <h3 class="modal-h3">➕ Adicionais</h3>
+    <div id="extrasList"></div>
+    <button class="btn ghost sm" id="btnAddExtra">➕ Adicionar opcional</button>
+    <div class="modal-footer-btns">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button class="btn primary" id="btnSaveP">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay center" id="overlayCoupon">
+  <div class="sheet" style="max-width:480px">
+    <div class="close-row">
+      <h2>🎟️ Novo Cupom</h2>
+      <button class="btn ghost" data-close>✕</button>
+    </div>
+    <div class="form-group"><label>Código *</label><input id="cupCode" placeholder="BEMVINDO10" style="text-transform:uppercase"></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="cupType">
+          <option value="percent">Percentual (%)</option>
+          <option value="fixed">Fixo (R$)</option>
+          <option value="frete">Frete grátis</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Valor *</label><input type="number" id="cupValue" step="0.01" min="0"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Compra mínima (R$)</label><input type="number" id="cupMin" step="0.01" value="0"></div>
+      <div class="form-group"><label>Limite de usos (0=ilimitado)</label><input type="number" id="cupLimit" value="0" min="0"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Limite por cliente (0=ilimitado)</label><input type="number" id="cupPer" value="0" min="0"></div>
+      <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:8px">
+        <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="cupFirst"> 1ª compra apenas</label>
+      </div>
+    </div>
+    <button class="btn primary full" id="btnSaveCoupon">💾 Salvar</button>
+  </div>
+</div>
+
+<div class="overlay center" id="overlayBairro">
+  <div class="sheet" style="max-width:480px">
+    <div class="close-row">
+      <h2 id="bairroTitle">Novo Bairro</h2>
+      <button class="btn ghost" data-close>✕</button>
+    </div>
+    <input type="hidden" id="bId">
+    <div class="form-group"><label>Nome do bairro *</label><input id="bName"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Taxa (R$)</label><input type="number" id="bTax" step="0.01" min="0" value="0"></div>
+      <div class="form-group"><label>KM aproximado</label><input type="number" id="bKm" step="0.1" min="0" value="0"></div>
+    </div>
+    <button class="btn primary full" id="btnSaveBairro">💾 Salvar</button>
+  </div>
+</div>
+
+<div class="overlay center" id="overlayCategory">
+  <div class="sheet" style="max-width:480px">
+    <div class="close-row">
+      <h2 id="catTitle">Nova Categoria</h2>
+      <button class="btn ghost" data-close>✕</button>
+    </div>
+    <input type="hidden" id="catId">
+    <input type="hidden" id="catOldName">
+    <div class="form-group"><label>Nome da categoria *</label><input id="catName" placeholder="Ex: Refrigerantes, Sucos..."></div>
+    <div class="form-group"><label>Emoji</label><input id="catEmoji" placeholder="🥤" maxlength="2"></div>
+    <button class="btn primary full" id="btnSaveCategory">💾 Salvar</button>
+  </div>
+</div>
+
+<div class="overlay center" id="overlayConfirm">
+  <div class="sheet" style="max-width:420px">
+    <div class="close-row">
+      <h2 id="confirmTitle">Confirmar</h2>
+      <button class="btn ghost" data-close>✕</button>
+    </div>
+    <p id="confirmMsg"></p>
+    <div class="modal-actions">
+      <button class="btn ghost" id="confirmCancel" data-close>Cancelar</button>
+      <button class="btn danger" id="confirmOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay center" id="overlayStock">
+  <div class="sheet" style="max-width:440px">
+    <div class="close-row">
+      <h2>📦 Ajustar Estoque</h2>
+      <button class="btn ghost" data-close>✕</button>
+    </div>
+    <input type="hidden" id="stkId">
+    <p class="hint" id="stkName">—</p>
+    <div class="form-group"><label>Estoque atual</label><input type="number" id="stkCurrent" disabled></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="stkType">
+          <option value="set">Definir novo valor</option>
+          <option value="add">Adicionar</option>
+          <option value="sub">Remover</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Quantidade</label><input type="number" id="stkQty" min="0" value="0"></div>
+    </div>
+    <div class="form-group"><label>Motivo (opcional)</label><input id="stkReason" placeholder="Reposição, perda, inventário..."></div>
+    <button class="btn primary full" id="btnSaveStock">💾 Aplicar</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="overlay center" id="overlaySuccess">
+  <div class="sheet" style="max-width:460px">
+    <div class="close-row">
+      <h2>Pedido confirmado</h2>
+      <button class="btn ghost" data-close>✕</button>
+    </div>
+    <div class="succ-box">
+      <div class="succ-ico">✅</div>
+      <h2>Recebemos seu pedido!</h2>
+      <p>Guarde o código para acompanhar o status.</p>
+      <div class="succ-info">
+        <div><span>Pedido</span><b id="succNum">#—</b></div>
+        <div><span>Total</span><b id="succTotal">R$ 0,00</b></div>
+        <div><span>Pagamento</span><b id="succPay">—</b></div>
+        <div><span>Previsão</span><b id="succTime">—</b></div>
+      </div>
+      <div class="pix-box hidden" id="succPix">
+        <div class="pix-qr" id="pixQR"></div>
+        <div class="pix-line">
+          <small>Pague com Pix no app do seu banco usando o código abaixo:</small>
+          <input id="pixCopy" readonly onclick="this.select()">
+          <button class="btn sm primary" id="btnCopyPix" style="justify-content:center">📋 Copiar código</button>
+        </div>
+      </div>
+      <div class="track-code-box">
+        <div class="track-code">
+          <small>Código de acompanhamento</small>
+          <span id="succCode">—</span>
+        </div>
+        <p class="succ-note" id="succNote"></p>
+      </div>
+      <div class="succ-actions">
+        <button class="btn success full" id="succWa">📱 Enviar no WhatsApp</button>
+        <button class="btn primary full" id="succTrack" style="margin-top:8px">🔎 Acompanhar pedido</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay center" id="overlayTrack">
+  <div class="sheet" style="max-width:480px">
+    <div class="close-row">
+      <h2>🔎 Acompanhar pedido</h2>
+      <button class="btn ghost" data-close>✕</button>
+    </div>
+    <div id="trackBody"></div>
+  </div>
+</div>
+
+<div class="overlay center" id="overlayMyOrders">
+  <div class="sheet" style="max-width:540px">
+    <div class="close-row">
+      <h2>📦 Meus Pedidos</h2>
+      <button class="btn ghost" data-close>✕</button>
+    </div>
+    <p class="subtitle">Pedidos feitos neste aparelho. Toque em <b>Comprar de novo</b> para repetir.</p>
+    <div id="myOrdersList"></div>
+  </div>
+</div>
+
+<div id="printSheet" class="print-sheet"></div>
+
+<!-- SCRIPTS -->
+<script src="js/vendor/qrcode.min.js?v=5"></script>
+<script src="js/state.js?v=5"></script>
+<script src="js/menu.js?v=5"></script>
+<script src="js/cart.js?v=5"></script>
+<script src="js/checkout.js?v=5"></script>
+<script src="js/admin-login.js?v=5"></script>
+<script src="js/admin-dashboard.js?v=5"></script>
+<script src="js/admin-log.js?v=5"></script>
+<script src="js/admin.js?v=5"></script>
+<script src="js/admin-orders.js?v=5"></script>
+<script src="js/admin-melhorias.js?v=5"></script>
+<script src="js/admin-pedidos-view.js?v=5"></script>
+<script src="js/backup.js?v=5"></script>
+<script src="js/app.js?v=4"></script>
+
+</body>
+</html>

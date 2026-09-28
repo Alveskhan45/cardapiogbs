@@ -1,0 +1,13 @@
+{
+  "name": "Produto - Cardápio Digital",
+  "short_name": "Cardápio",
+  "description": "Cardápio digital para pedidos",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#d90429",
+  "lang": "pt-BR",
+  "icons": []
+}

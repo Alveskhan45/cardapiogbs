@@ -1,0 +1,556 @@
+================================================================================
+PROMPT SUPERCOMPLETO - CRIAÇÃO DO SaaS CARDÁPIO DIGITAL
+Versão: config-otimo-v2 (estado funcional de referência)
+================================================================================
+Este documento descreve TUDO sobre o projeto: estrutura, telas, fontes,
+ações, alternativas e regras que NÃO podem ser violadas.
+Serve como prompt de comando para recriar/corrigir o sistema do zero.
+
+================================================================================
+1. IDENTIDADE DO PROJETO
+================================================================================
+Nome: CardapioDigital
+Tipo: SaaS de cardápio digital para distribuidora de bebidas / delivery local
+Stack: Node.js 18+ / Express 5 / HTML+CSS+JS vanilla (sem framework)
+Porta: 3001
+URL: http://localhost:3001
+Painel admin: mesma URL (login por senha)
+Senha inicial: gerada aleatoriamente pelo servidor na 1ª execução (nunca há senha padrão no código; hash armazenado em data/db.json → config.adminPasswordHash). A senha só é criada/trocada na aba ⚙️ Segurança.
+Diretório: C:\Users\Admin\OneDrive\Área de Trabalho\Alves\CardapioDigital
+Comando start: npm start (= node server.js)
+Ambiente: Windows, PowerShell (grep/||/&& NÃO funcionam - usar findstr)
+Cache busting: ?v=5 nos scripts/CSS do index.html (app.js ainda ?v=4)
+
+================================================================================
+2. ESTRUTURA DE ARQUIVOS
+================================================================================
+CardapioDigital/
+├── package.json           # express ^5.2.1, scripts: start/dev = node server.js
+├── server.js              # Backend Express (24KB): API, SSE, auth, persistência
+├── data/
+│   └── db.json            # Banco de dados JSON (36KB): products, orders, coupons,
+│                          #   categories, bairros, adminLog, stockLog, config
+├── public/
+│   ├── index.html         # SPA única (52KB): todas as telas + overlays
+│   ├── manifest.json      # PWA manifest
+│   ├── .nojekyll          # (deploy GitHub Pages)
+│   ├── css/
+│   │   └── style.css      # Todo o estilo (57KB)
+│   ├── js/
+│   │   ├── state.js       # (28KB) Estado global, persistência, sync, horário
+│   │   ├── menu.js        # (16KB) Cardápio público, busca, categorias, detalhe item
+│   │   ├── cart.js        # (10KB) Carrinho, calcItemPrice, aplicar cupom
+│   │   ├── checkout.js    # (20KB) Checkout, forma pagamento, entrega, sucesso
+│   │   ├── app.js         # (14KB) Init, navegação, showConfirm global, conexão
+│   │   ├── admin-login.js # (9KB)  Login, lock, SSE events, polling fallback
+│   │   ├── admin.js       # (47KB) Núcleo admin: produtos, categorias, cupons,
+│   │   │                         #   bairros, config, segurança, showConfirm
+│   │   ├── admin-dashboard.js # (5KB)  Dashboard/KPIs
+│   │   ├── admin-orders.js    # (7KB)  Pedidos (lista/detalhe)
+│   │   ├── admin-pedidos-view.js # (14KB) Kanban de pedidos + arrastar cartões
+│   │   ├── admin-melhorias.js # (8KB)  Melhorias/extra
+│   │   ├── admin-log.js       # (2KB)  Log de atividades + histórico estoque
+│   │   ├── backup.js          # (2KB)  Backups automáticos (localStorage)
+│   │   └── vendor/
+│   │       └── qrcode.min.js  # QR Code lib
+│   └── assets/produtos/       # Imagens dos produtos (jpg/png)
+├── README.md
+├── .gitignore
+├── erro.txt                    # log de erro auxiliar
+└── PROMPT-SUPERCOMPLETO-CARDÁPIO.txt  (este arquivo)
+
+Ordem de carregamento dos <script> no index.html (IMPORTANTE - dependências):
+  qrcode.min.js → state.js → menu.js → cart.js → checkout.js →
+  admin-login.js → admin-dashboard.js → admin-log.js → admin.js →
+  admin-orders.js → admin-melhorias.js → admin-pedidos-view.js → backup.js → app.js
+
+Dependências externas (CDN):
+  - Google Fonts: Inter, Poppins, Oswald, Yanone Kaffeesatz, Cuprum
+  - jszip 3.10.1 (cdnjs)
+  - qrcode.min.js (local)
+
+================================================================================
+3. BANCO DE DADOS (data/db.json)
+================================================================================
+Chaves de topo:
+  products[]    - id, name, desc, price, category, active, image, stock,
+                  variations[{name,price}], extras[{name,price}]
+  orders[]      - id, code, items, total, status, customer, payment,
+                  delivery, address, bairro, createdAt, coupon
+  coupons[]     - id, code, type(percent/frete/valor), value, min, limit,
+                  uses, active, first, per
+  categories[]  - string[] (ex: "Refrigerantes", "Cervejas") - ordem = ordem exibição
+  bairros[]     - id, name, tax, minOrder, active (taxa de entrega por bairro)
+  adminLog[]    - icon, text, date (log de ações do admin)
+  stockLog[]    - icon, text, date (movimentações de estoque)
+  config        - storeName, slogan, phone, whatsapp, instagram (cInsta),
+                  heroEmoji, minOrder, deliveryTime, openDays, openHours,
+                  adminPasswordHash, paymentOptions, banner, heroImage,
+                  theme colors, footer texts, etc.
+
+Estados seed: SEED_CATEGORIES, SEED_* em state.js para novas instalações.
+
+================================================================================
+4. API ENDPOINTS (server.js)
+================================================================================
+PÚBLICOS:
+  GET  /api/events            # SSE (Server-Sent Events) para sincronização real-time
+  GET  /api/health            # healthcheck
+  GET  /api/public            # estado público (sem senha)
+  GET  /api/orders/:id        # status do pedido
+  POST /api/orders            # criar pedido
+  GET  /api/orders/:id/wa     # link WhatsApp do pedido
+  GET  /api/track/:code       # rastreio por código
+  GET  /acompanhar            # página de acompanhamento
+  POST /api/login             # login admin → retorna hash + token
+
+PROTEGIDOS (requireAdmin):
+  GET    /api/admin/state     # estado completo
+  PUT    /api/admin/state     # salvar estado completo
+  POST   /api/admin/password  # alterar senha
+  POST   /api/logout          # logout
+
+Persistência: escreve em data/db.json (async, pushStateNow para push imediato).
+Sincronização cliente: pullAdmin/pullPublic + SSE (com polling 10s fallback).
+
+================================================================================
+5. TELAS DO CLIENTE (público)
+================================================================================
+SPA única com seções navegáveis:
+
+5.1 TOPO (topbar)
+    - Contato editável: topbarContact (📞 telefone | @instagram)
+    - Atualizado por renderContactInfo() em app.js (usa c.phone, c.instagram/cStoreName)
+    - Pill de conexão: #serverState (online/offline/sincronizando)
+
+5.2 HERO (clientStoreHeader)
+    - Emojis loja, nome (heroName), slogan (heroSlogan)
+    - Badges: heroMin (pedido mínimo), heroTime (entrega), heroOpen (horário)
+    - SEM gradiente, SEM emoji decorativo desnecessário
+
+5.3 ÁREA DE BUSCA + CATEGORIAS
+    - Campo de busca (input)
+    - Submenu de categorias: EM FLUXO NORMAL (max-height transition, push-down)
+      → NÃO usa scrollIntoView
+      → Toggle funciona DURANTE a busca
+    - Com busca ativa:
+      → categorias com match no TOPO e ABERTAS
+      → categorias sem match no BASE e FECHADAS mas CLICÁVEIS
+      → clicar em sem-match abre e mostra TODOS os produtos da categoria
+    - Sem busca: accordion normal (uma categoria aberta via openCategory)
+
+5.4 LISTA DE PRODUTOS (sticky + menu-view)
+    - Cards de produto com: imagem, nome, preço, botão adicionar (quick-add)
+    - Preço exibido: calcItemPrice (variação = preço ABSOLUTO, extras = delta)
+    - Cards centralizados max-width:640px, bordas cinza 2px contínuas
+
+5.5 MODAL DETALHE DO ITEM (overlayItem / sheetItem)
+    - Detalhes, variações (rádio, preço absoluto), extras (checkbox, delta)
+    - Quantidade, botão adicionar ao carrinho
+    - Etária: se p.ageRestricted mostra overlay de confirmação 18+
+
+5.6 CARRINHO (overlayCart)
+    - Linhas do carrinho, editar qty, remover
+    - Campo cupom (couponMsg), taxa entrega (cartExtra)
+
+5.7 CHECKOUT (overlayCheckout)
+    - Resumo itens (coItems), dados (coInfo)
+    - Nome, telefone, endereço, bairro (select com taxas)
+    - Forma de pagamento (config.paymentOptions): Pix, Dinheiro, Cartão...
+    - Troco, taxa de entrega, mínimo por bairro
+    - Envia POST /api/orders
+
+5.8 SUCESSO (overlaySuccess)
+    - Número do pedido, link WhatsApp, código de rastreio, QR Code
+
+5.9 ACOMPANHAR PEDIDO (/acompanhar + overlayTrack)
+    - Busca por código, timeline de status
+
+5.10 MEUS PEDIDOS (overlayMyOrders)
+     - Lista de pedidos do cliente (localStorage)
+
+5.11 RODAPÉ (footer client-only-footer)
+     - SEMPRE claro (não escuro)
+     - Link "Acompanhar meu pedido", "Meus pedidos"
+     - Dados de contato: renderContactInfo()
+
+Estruturas removidas: conn-strip (não existe mais).
+
+================================================================================
+6. TELAS DO ADMIN (painel)
+================================================================================
+Acesso: botão admin → overlayLogin (senha) → openAdminPanel()
+Sidebar (.sb-nav) com 13 abas:
+
+ 6.1 DASHBOARD (tab-dash)    - KPIs, alertas, últimos pedidos (admin-dashboard.js)
+ 6.2 PRODUTOS (tab-prod)     - Lista, busca (productMatches), criar/editar/excluir,
+                               bulk select/deactivate/delete, select de categoria (#pCat)
+                               Modal overlayProduct: nome, preço, categoria, descrição,
+                               imagem, estoque, variações, extras, etário
+ 6.3 CATEGORIAS (tab-cat)    - CRUD completo com MODAIS PRÓPRIOS:
+                               → Adicionar: addCategory() → overlayCategory (catName+catEmoji)
+                               → Editar: editCategory(old) → overlayCategory (renomear)
+                               → Excluir: showConfirm() → overlayConfirm
+                               → Botões [data-rencat] e [data-delcat] na lista
+ 6.4 PEDIDOS (tab-ped)       - Lista + Kanban (admin-pedidos-view.js)
+                               Visualização: Lista | Kanban (pedViewSwitch)
+                               Kanban: arrastar cartões (dragstart), mudar status
+                               Cancelar pedido → showConfirm
+ 6.5 CLIENTES (tab-clientes) - Detalhe em overlayCliente
+ 6.6 ENTREGAS (tab-entregas) - Detalhe em overlayEntrega
+ 6.7 RELATÓRIOS (tab-rel)    - Top, pagamentos, tipo, cupons, ABC, dias
+ 6.8 CUPONS (tab-cup)        - CRUD com showConfirm para excluir
+                               Valores: percent/frete/valor; min, limite, primeiro uso
+ 6.9 FRETE/BAIRROS (tab-bair)- CRUD bairros com taxas
+                               Modal overlayBairro
+ 6.10 ESTOQUE (tab-estoque)  - Variação de estoque + histórico (stockLog)
+                               Modal overlayStock
+ 6.11 ATIVIDADES (tab-log)   - Log (adminLog) + histórico estoque
+                               Botões limpar → showConfirm
+ 6.12 CONFIGURAÇÕES (tab-cfg)- storeName, slogan, telefone, WhatsApp, Instagram,
+                               pedido mínimo, tempo entrega, dias/horário, banner,
+                               tema, opções pagamento, saveConfig()
+ 6.13 SEGURANÇA (tab-sec)    - Alterar senha (POST /api/admin/password),
+                               Backups automáticos (localStorage, BACKUP_MAX),
+                               Danger zone: apagar backups/pedidos/carrinhos/reset TUDO
+                               (todos com showConfirm, reset = showConfirm duplo)
+
+Badge sidebar: sbBadgeProd, sbBadgePed (alert), sbBadgeClientes, sbBadgeEntregas
+
+================================================================================
+7. MODAIS (overlays) - INVENTÁRIO COMPLETO
+================================================================================
+Todos em index.html, classe "overlay center" (ou "overlay" para sheets):
+
+  overlayLogin        - Login admin
+  overlayOrderDetail - Detalhe de pedido (admin)
+  overlayCliente      - Detalhe cliente
+  overlayEntrega      - Detalhe entrega
+  overlayItem         - Detalhe produto (sheet inferior, com #sheetItem)
+  overlayCart         - Carrinho
+  overlayCheckout     - Checkout
+  overlayProduct      - Novo/editar produto (variações, extras, #variationList, #extrasList)
+  overlayCoupon       - Novo/editar cupom
+  overlayBairro       - Novo/editar bairro
+  overlayCategory     - NOVO/EDITAR CATEGORIA (catName, catEmoji, catOldName) ★ v2
+  overlayConfirm      - CONFIRMAÇÃO GENÉRICA (confirmTitle, confirmMsg,
+                        confirmOk, confirmCancel) ★ v2
+  overlayStock        - Movimentação de estoque
+  overlaySuccess      - Pedido criado com sucesso
+  overlayTrack        - Rastreio (#trackBody)
+  overlayMyOrders     - Meus pedidos (#myOrdersList)
+  #printSheet         - Folha de impressão do pedido (print-sheet)
+
+Fechamento: genérico via [data-close] → closeAll() (app.js:294).
+Sheets de item: handlers específicos [data-close] em menu.js (sheetItem).
+
+================================================================================
+8. SISTEMA DE MODAIS PRÓPRIOS (SUBSTITUI prompt/confirm NATIVOS)
+================================================================================
+8.1 FUNÇÃO showConfirm (app.js - global, carrega cedo)
+    showConfirm(msg, onOk, title?)
+    - Usa #overlayConfirm, #confirmTitle, #confirmMsg, #confirmOk, #confirmCancel
+    - confirmOk: fecha overlay + chama onOk()
+    - confirmCancel: fecha overlay
+    - Fallback: se overlay não existe, chama onOk() direto
+    - Existe também cópia em admin.js (usa arguments[2] para título)
+
+8.2 MODAL overlayCategory (admin.js)
+    addCategory()       → título "Nova categoria", catOldName=''
+    editCategory(old)   → título "Editar", carrega nome+emoji atual, catOldName=old
+    saveCategory()      → valida nome, renomeia (propaga para produtos) ou cria,
+                           logActivity, save(), renderCategories+populateCategoryFilter
+                           +renderCats+renderAdminProducts, toast
+
+8.3 USOS DE showConfirm (todos já migrados):
+    admin.js:        excluir produto, bulk delete, excluir cupom, excluir bairro,
+                     apagar backups, apagar pedidos, limpar carrinhos,
+                     resetar TUDO (confirm duplo aninhado)
+    admin-log.js:    limpar log, limpar histórico estoque
+    admin-login.js:  sair do painel
+    admin-pedidos-view.js: cancelar pedido
+    state.js:        restoreAutoBackup (async/await com Promise)
+    menu.js:         [data-rencat] → editCategory(old), [data-delcat] → showConfirm
+
+8.4 REGRAS: NENHUM prompt() ou confirm() nativo pode existir em public/js.
+    Verificar com: findstr /S /N "prompt( confirm(" public\js\*.js
+    (deve retornar NADA)
+
+================================================================================
+9. LÓGICA DE BUSCA - ESTADO "ÓTIMO" (NÃO MEXER)
+================================================================================
+ARQUIVO: public/js/menu.js (linhas ~15-28)
+
+    function norm(s) {
+      return String(s || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // remove acentos
+        .replace(/ç/g, 'c')                                 // ç → c
+        .toLowerCase();
+    }
+
+    function productMatches(p, q) {
+      if (!p.active) return false;
+      if (!q) return true;
+      const terms = norm(q).split(/\s+/).filter(Boolean);
+      const hay = norm(p.name);          // APENAS NOME (não descrição)
+      return terms.every(t =>
+        hay.split(/\s+/).some(w => w.startsWith(t))   // PREFIXO, não includes
+      );
+    }
+
+REGRAS IMUTÁVEIS:
+  1. Busca fonte: APENAS p.name (nunca desc, categoria, extras)
+  2. Algoritmo: PREFIXO de palavra (w.startsWith(t)), nunca includes/contains
+  3. Mínimo: 1 letra (sem restrição de tamanho)
+  4. Multi-termos: AND (todos os termos devem casar)
+  5. norm(): remove acentos, ç→c, lowercase
+  6. Produto inativo (active=false): nunca aparece em busca
+  7. Admin usa EXATAMENTE a mesma productMatches:
+     renderAdminProducts: list.filter(p => productMatches({...p, active:true}, q))
+
+================================================================================
+10. LÓGICA DE CATEGORIAS NA BUSCA - renderCats (menu.js)
+================================================================================
+    const isOpen = searching ? hasMatch : (openCategory === cat);
+    // Com busca: categorias com match → topo + ABERTAS; sem match → base + FECHADAS
+    // Toggle sempre funciona (clique abre mesmo sem match → mostra TODOS os produtos)
+    // SEM scrollIntoView (não pode rolar a página)
+
+REGRAS:
+  1. Ordem dinâmica durante busca (com match primeiro)
+  2. Categorias sem match continuam visíveis e clicáveis
+  3. Clique em categoria sem match: abre e lista TODOS os produtos dela
+  4. Submenu em fluxo normal (push-down com max-height transition)
+  5. Nunca usar scrollIntoView
+
+================================================================================
+11. LÓGICA DE PREÇOS (NÃO PODE MUDAR)
+================================================================================
+calcItemPrice(item, base) - igual em cart.js:8-13 E server.js:316-321:
+
+    const vPrice = variation ? variation.price : null;
+    const finalBase = vPrice !== null ? vPrice : base;   // Variação = PREÇO ABSOLUTO
+    return finalBase + extrasSum;                         // Extras = DELTA (soma)
+
+REGRAS:
+  1. Variação de preço é ABSOLUTO (substitui o preço base), nunca delta
+  2. Extras são DELTA (adicionam ao preço final)
+  3. Cliente e servidor usam a MESMA lógica (calcItemPrice idêntica nos dois)
+  4. Preço exibido no botão quick-add = calcItemPrice com defaults
+
+================================================================================
+12. CONFIGURAÇÕES DE CONTATO/TELEFONE
+================================================================================
+  - config.phone      → telefone editável pelo admin (cPhone)
+  - config.whatsapp   → WhatsApp editável (cWpp)
+  - config.instagram  → Instagram NOVO campo (cInsta)
+  - renderContactInfo() (app.js): atualiza topbarContact, rodapé, hero
+  - Telefone NÃO pode ficar hardcoded - sempre vir do state.config
+
+================================================================================
+13. CAMPO CATEGORIA DO PRODUTO
+================================================================================
+  - É <select id="pCat"> (SELECT nativo), NÃO datalist
+  - Populado com state.categories existentes (finalCats = cats.length ? cats : SEED_CATS)
+  - Não permite digitação livre de categoria inexistente
+
+================================================================================
+14. PERSISTÊNCIA E SYNC
+================================================================================
+  - save() → salva local (localStorage KEY) + pushStateNow() → PUT /api/admin/state
+  - saveConfig: ASYNC, com pushStateNow imediato ao servidor
+  - pullAdmin / pullPublic: GET /api/admin/state e /api/public
+  - SSE /api/events: sincronização real-time
+  - Fallback polling: 10s (admin-login.js connectEvents)
+  - applyServerState: aplica estado vindo do servidor
+
+================================================================================
+15. NOTIFICAÇÕES DO ADMIN
+================================================================================
+  - connectEvents() chamado em openAdminPanel()
+  - Notification.requestPermission() para notificações desktop
+  - Fallback polling 10s se SSE falhar
+
+================================================================================
+16. ESTILO VISUAL (style.css) - DIRETRIZES
+================================================================================
+  - Layout central: max-width:640px em topbar/hero/sticky/menu-view/footer
+  - Bordas: cinza 2px contínuas, cantos arredondados
+  - Footer: SEMPRE claro (não escuro)
+  - Hero: SEM gradiente
+  - Sticky header: categorias fixas no topo ao rolar
+  - Sem conn-strip (removido)
+  - Emojis apenas onde agem como ícone funcional (não decorativo)
+
+================================================================================
+17. VARIÁVEIS GLOBAIS IMPORTANTES
+================================================================================
+  state        - estado global completo (state.js)
+  save()       - persistir alterações
+  toast(msg)   - notificação flutuante
+  $()          - atalho document.getElementById
+  uid()        - gerar id único
+  norm(), productMatches() - busca
+  calcItemPrice() - preços (duplicada cart.js/server.js)
+  showConfirm(msg, onOk, title?) - modal confirmação (app.js)
+  addCategory(), editCategory(), saveCategory() - CRUD categorias
+  renderCats(), renderMenu(), renderCart() - renders públicos
+  renderAdmin*, renderDashboard* - renders admin
+  logActivity(icon, text) - registrar no adminLog
+  isStoreOpen() - horário de funcionamento
+  closeAll() - fechar todos os overlays
+
+================================================================================
+18. O QUE NÃO PODE ACONTECER (PROIBIÇÕES CRÍTICAS)
+================================================================================
+18.1 BUSCA
+  ✗ Buscar em descrição, categoria, extras ou qualquer campo além de p.name
+  ✗ Usar includes/contains em vez de startsWith (prefixo)
+  ✗ Exigir 2+ letras (mínimo é 1 letra)
+  ✗ Trocar norm() para não remover acentos ou ç
+  ✗ Deixar produto inativo aparecer na busca
+
+18.2 CATEGORIAS
+  ✗ Usar scrollIntoView (já removido - não reintroduzir)
+  ✗ Bloquear toggle durante busca
+  ✗ Esconder totalmente categorias sem match (devem ficar clicáveis)
+  ✗ Restringir clique em categoria sem match (deve mostrar todos os produtos)
+  ✗ Usar scroll suave que pule a página
+
+18.3 PREÇOS
+  ✗ Tratar variação como delta (variação é preço ABSOLUTO)
+  ✗ Tratar extras como preço absoluto (extras são DELTA)
+  ✗ Divergência entre calcItemPrice do cliente (cart.js) e do servidor (server.js)
+
+18.4 MODAIS
+  ✗ Usar prompt() nativo - PROIBIDO
+  ✗ Usar confirm() nativo - PROIBIDO
+  ✗ Usar alert() desnecessário (usar toast())
+  ✗ Deixar de registrar bind do overlayConfirm (confirmOk/confirmCancel)
+  ✗ Abrir overlayCategory sem definir catOldName (senão salva como novo)
+
+18.5 CATEGORIA DO PRODUTO
+  ✗ Usar datalist em vez de select (deve ser <select id="pCat">)
+  ✗ Permitir digitar categoria que não existe
+
+18.6 CONTATO
+  ✗ Hardcode de telefone/whatsapp/instagram
+  ✗ Ignorar cPhone/cWpp/cInsta no renderContactInfo
+
+18.7 PERSISTÊNCIA
+  ✗ save() sem pushStateNow() (perde sincronização servidor)
+  ✗ saveConfig síncrono sem push imediato
+  ✗ Remover adminPasswordHash do db.json sem redefinir fluxo de senha
+  ✗ Esquecer cache busting ao alterar js/css (?v=5)
+
+18.8 LAYOUT
+  ✗ Voltar a dark footer (rodapé deve ser SEMPRE claro)
+  ✗ Reintroduzir conn-strip
+  ✗ Adicionar gradiente no hero
+  ✗ Quebrar max-width:640px central
+
+18.9 SENHA
+  ✗ Senha em texto puro no db.json (sempre hash)
+  ✗ Retornar hash inconsistente na API (o endpoint /api/login retorna hash)
+
+18.10 AMBIENTE WINDOWS/POWERSHELL
+  ✗ Usar grep (não existe) - usar findstr
+  ✗ Usar || ou && em comandos - usar ; ou if ($?) {...}
+  ✗ Esperar que bash do agente mantenha npm start vivo (timeout 120s mata;
+     usuário deve rodar em terminal separado ou usar PM2/nodemon)
+
+================================================================================
+19. FLUXOS DE AÇÃO - PASSO A PASSO
+================================================================================
+
+19.1 ADICIONAR CATEGORIA
+    Clique "+ Nova" → addCategory() → overlayCategory (vazio)
+    → usuário digita nome+emoji → saveCategory()
+    → valida (obrigatório, não duplicado) → state.categories.push
+    → logActivity ➕ → save() → renderCategories+renderCats+renderAdminProducts
+    → fecha modal → toast "✅ Categoria salva"
+
+19.2 EDITAR/RENOMEAR CATEGORIA
+    Clique [data-rencat] → editCategory(old) → overlayCategory (preenchido)
+    → usuário altera → saveCategory()
+    → se mudou nome: state.categories[idx]=name + atualiza p.category dos produtos
+    → logActivity ✏️ → save() → renders → toast
+
+19.3 EXCLUIR CATEGORIA
+    Clique [data-delcat] → showConfirm("Excluir X?") → confirmOk
+    → remove da lista (produtos ficam com categoria órfã - verificar comportamento)
+
+19.4 BUSCA NO CARDÁPIO
+    digita → renderCats → productMatches para cada produto de cada categoria
+    → categorias com match vão topo e abrem; sem match vão base e fecham
+    → exibe contagem de resultados
+
+19.5 LOGIN ADMIN
+    botão admin → overlayLogin → senha → POST /api/login
+    → compara hash → openAdminPanel() → connectEvents() (SSE+Notification)
+    → localStorage marca admin unlocked
+
+19.6 CRIAR PEDIDO (cliente)
+    adiciona itens → carrinho → checkout → dados+bairro+pagamento
+    → POST /api/orders → grava em db.json → overlaySuccess (código+wa+QR)
+
+19.7 ALTERAR SENHA
+    admin tab seg → nova senha → POST /api/admin/password
+    → server gera hash → salva em config.adminPasswordHash
+
+================================================================================
+20. PARA REFAZER DO ZERO (CHECKLIST)
+================================================================================
+[ ] npm init + instalar express ^5.2.1
+[ ] server.js: express, porta 3001, static public/, endpoints API, SSE, auth
+[ ] data/db.json com products/orders/coupons/categories/bairros/adminLog/stockLog/config
+[ ] index.html: SPA com todas as seções + overlays (seção 7)
+[ ] style.css: layout 640px, bordas 2px, footer claro, sticky, sem gradiente
+[ ] state.js: estado global, save+pushStateNow, pullAdmin/pullPublic, SEEDs, isStoreOpen
+[ ] menu.js: norm+productMatches (SEÇÃO 9 EXATA), renderCats (SEÇÃO 10), renderMenu, detalhe item
+[ ] cart.js: carrinho, calcItemPrice (SEÇÃO 11 EXATA)
+[ ] checkout.js: fluxo de pedido, pagamento, entrega
+[ ] app.js: init, showConfirm global (SEÇÃO 8.1), renderContactInfo, closeAll [data-close]
+[ ] admin-login.js: login, SSE connectEvents, polling 10s fallback
+[ ] admin.js: CRUD completo, addCategory/editCategory/saveCategory, showConfirm usos,
+      select #pCat, danger zone com showConfirm duplo
+[ ] admin-dashboard.js, admin-orders.js, admin-pedidos-view.js (kanban),
+      admin-melhorias.js, admin-log.js, backup.js
+[ ] Substituir TODOS prompt/confirm por modais (SEÇÃO 18.4)
+[ ] Cache busting ?v=5
+[ ] Testar: busca, categorias, preços, CRUD categorias, todos os confirms, login
+
+================================================================================
+21. COMANDOS ÚTEIS DE DIAGNÓSTICO
+================================================================================
+  # Iniciar servidor (terminal do usuário - não pelo agente)
+  npm start
+
+  # Matar servidor
+  taskkill /f /im node.exe
+
+  # Verificar que não há prompt/confirm nativos
+  findstr /S /N /C:"prompt(" public\js\*.js
+  findstr /S /N /C:"confirm(" public\js\*.js   # (deve achar só showConfirm)
+
+  # Verificar versões de cache
+  findstr /N "?v=" public\index.html
+
+  # Testar API
+  curl http://localhost:3001/api/health
+
+  # Windows PowerShell: usar findstr (NÃO grep), ; (NÃO &&)
+
+================================================================================
+22. HISTÓRICO DE DECISÕES (CONFIG-OTIMO-V2)
+================================================================================
+  v1: Layout 640px, busca prefixo+só-nome, footer claro, telas editáveis
+  v2: Modais próprios (overlayCategory+overlayConfirm) substituindo TODOS
+      prompt/confirm; select de categoria; notificações admin (SSE+polling);
+      busca categorias dinâmica; saveConfig async+push imediato;
+      reset de senha corrigido (hash consistente)
+
+Referência de estado: "config-otimo-v2" - se usar git, marcar com essa tag.
+================================================================================
+FIM DO DOCUMENTO
+================================================================================

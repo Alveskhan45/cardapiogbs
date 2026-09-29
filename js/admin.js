@@ -760,18 +760,31 @@ function addressParts(c) {
   if (street || number || district || city) return { street, number, district, city };
   if (!cfg.address) return { street: '', number: '', district: '', city: '' };
 
-  const parts = String(cfg.address).split(',').map(s => s.trim()).filter(Boolean);
-  if (!parts.length) return { street: '', number: '', district: '', city: '' };
+  /* Só para endereços antigos, salvos como texto único
+     ("Rua X, 410 - Bairro - Cidade"). O formato de exibição é
+     "<rua>, <numero> - <bairro> - <cidade>", então o número e a cidade
+     andam juntos depois do " - ". Sem separar isso, o pedaço inteiro
+     caía no campo Cidade: "410 - Pajuçara - Maracanaú". */
+  const cru = String(cfg.address).split(',').map(s => s.trim()).filter(Boolean);
+  if (!cru.length) return { street: '', number: '', district: '', city: '' };
 
-  const numRe = /^\d{1,5}\s?[a-zA-Z]?$/;
-  const rest = [];
-  for (const p of parts) {
-    if (numRe.test(p) && !number) { number = p; continue; }
-    rest.push(p);
+  let cauda = cru.slice(1).join(', ');   // tudo depois da rua
+  const inicial = cru[0];
+
+  /* Número: no começo da cauda, sozinho ou colado em " - ". */
+  const mNum = cauda.match(/^(\d{1,5}\s?[a-zA-Z]?)\s*(?:-\s*)?(.*)$/);
+  if (mNum) {
+    number = mNum[1];
+    cauda = mNum[2].trim();
   }
-  if (rest.length) street = rest.shift();
-  if (rest.length) city = rest.pop();
-  if (rest.length) district = rest.join(', ');
+
+  /* Sobrou "bairro - cidade": o último pedaço é a cidade. */
+  const sobra = cauda.split(/\s+-\s+/).map(s => s.trim()).filter(Boolean);
+  if (sobra.length) {
+    city = sobra.pop();
+    if (sobra.length) district = sobra.join(' - ');
+  }
+  street = inicial;
   return { street, number, district, city };
 }
 
@@ -987,6 +1000,10 @@ async function autoCoordsFromCep() {
        falharem. O número continua intocado — é o único campo manual. */
     const changed = applyCepToAddress(j);
     const coordsMudaram = setCoordsFrom(j.coords);
+    /* Atualiza o link do mapa e o aviso de coordenadas: o CEP acabou de
+       trazer a localização, e sem isto o link ficaria apontando para o
+       endereço antigo (ou oculto). */
+    updateCoordsHelp();
     if (coordsMudaram || changed) {
       toast('📍 Endereço preenchido pelo CEP ' + maskCep(cep) + (changed ? ' — confira e clique em 💾 Salvar' : ''));
     }

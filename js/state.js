@@ -6,7 +6,7 @@ const KEY = 'bebidas_cardapio_v6';
    descarta a config velha que ele tinha guardado e passa a usar a nova.
    Sem isso, quem já abriu o site antes continuaria vendo o número antigo,
    porque o que está salvo no aparelho ganha do que está no arquivo. */
-const CFG_REV = 2;
+const CFG_REV = 3;
 
 let state = {
   products: [],
@@ -32,7 +32,6 @@ let state = {
     whatsapp: '5585985708628',
     phone: '(85) 98570-8628',
     instagram: 'gostinho de amor',
-    address: 'Rua Santa Helena, 410 - Pajuçara - Maracanaú',
     minOrder: 15,
     deliveryTime: '30-45 min',
     openTime: '06:00',
@@ -45,11 +44,17 @@ let state = {
     freteKmGratis: 0,
     freteGratisAcima: 0,
     storeCoords: '',
-    storeZip: '',
-    storeStreet: '',
-    storeNumber: '',
-    storeDistrict: '',
-    storeCity: '',
+    storeZip: '61932640',
+    /* Endereço nos 4 campos separados, e não só o texto em 'address':
+       é assim que o painel abre a tela de Configurações. */
+    storeStreet: 'Rua Santa Helena',
+    storeNumber: '410',
+    storeDistrict: 'Pajuçara',
+    storeCity: 'Maracanaú',
+    /* Montado a partir das 4 partes acima, no mesmo formato que o painel
+       grava: "Rua, numero - bairro - cidade". É este texto que aparece no
+       rodapé do cardápio e no PDF. */
+    address: 'Rua Santa Helena, 410 - Pajuçara - Maracanaú',
     storeBanner: '',
     payments: ['Pix','Dinheiro','Cartão na entrega'],
     pix: '',

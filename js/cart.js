@@ -5,12 +5,14 @@ function itemSignature(id, variation, extras, obs) {
   return `${id}__${vkey}__${ekey}__${obs}`;
 }
 
+/* Variação e extra são aditivos (+R$) — é o que o editor do painel pede
+   (placeholder "+R$") e o que o seed de dados usa. Tratar a variação como
+   preço absoluto zera o item quando a variação custa 0. */
 function calcItemPrice(p, variation, extras) {
   const base = p.promo && p.promoPrice ? p.promoPrice : p.price;
-  const vPrice = variation ? (variation.price || 0) : null;
-  const eAdd = (extras||[]).reduce((s,e) => s + (e.price||0), 0);
-  const finalBase = vPrice !== null ? vPrice : base;
-  return finalBase + eAdd;
+  const vAdd = variation ? (Number(variation.price) || 0) : 0;
+  const eAdd = (extras||[]).reduce((s,e) => s + (Number(e.price) || 0), 0);
+  return base + vAdd + eAdd;
 }
 
 function addToCart(id, qty=1, variation=null, extras=[], obs='') {
@@ -135,10 +137,10 @@ function renderCartExtra(sub) {
     ${min > 0 ? (falta > 0
       ? `<div class="co-warn">⚠️ Faltam <b>${brl(falta)}</b> para o pedido mínimo de ${brl(min)}</div>`
       : `<div class="co-ok">✅ Pedido mínimo atingido (${brl(min)})</div>`) : ''}
-    <div>🕒 Entrega estimada: <b>${c.deliveryTime || '—'}</b></div>
+    <div>🕒 Entrega estimada: <b>${esc(c.deliveryTime || '—')}</b></div>
     <div>🛵 Frete: <b>${appliedCoupon && appliedCoupon.type === 'frete' ? 'Grátis 🎉' : freightHint()}</b> <span style="opacity:.8">(estimado — confirmado no próximo passo)</span></div>
     ${appliedCoupon
-      ? `<div>🎟️ Cupom <b>${appliedCoupon.code}</b> aplicado${appliedCoupon.type === 'frete' ? ' (frete grátis)' : ''}</div>`
+      ? `<div>🎟️ Cupom <b>${esc(appliedCoupon.code)}</b> aplicado${appliedCoupon.type === 'frete' ? ' (frete grátis)' : ''}</div>`
       : '<div>🎟️ Tem um cupom? Digite o código acima e toque em <b>Aplicar</b>.</div>'}
   </div>`;
 }
@@ -177,16 +179,16 @@ function renderCart() {
       if (!p) return '';
       const unitPrice = calcItemPrice(p, c.variation, c.extras||[]);
       const imgContent = p.image && (p.image.startsWith('http')||p.image.startsWith('data:')||p.image.startsWith('assets/'))
-        ? `<img src="${p.image}" style="width:100%;height:100%;object-fit:cover;border-radius:10px">`
-        : (p.image || '🥤');
-      const varText = c.variation ? ` • ${c.variation.name}` : '';
-      const extrasText = c.extras && c.extras.length ? ` • +${c.extras.map(e=>e.name).join(', ')}` : '';
-      const obsText = c.obs ? `<div class="obs-tag">📝 ${c.obs}</div>` : '';
+        ? `<img src="${esc(p.image)}" style="width:100%;height:100%;object-fit:cover;border-radius:10px">`
+        : esc(p.image || '🥤');
+      const varText = c.variation ? ` • ${esc(c.variation.name)}` : '';
+      const extrasText = c.extras && c.extras.length ? ` • +${esc(c.extras.map(e=>e.name).join(', '))}` : '';
+      const obsText = c.obs ? `<div class="obs-tag">📝 ${esc(c.obs)}</div>` : '';
       return `
         <div class="cart-line">
           <div class="thumb" style="background:${thumbBg(p.category)}">${imgContent}</div>
           <div class="info">
-            <strong>${p.name}</strong>
+            <strong>${esc(p.name)}</strong>
             <small>${brl(unitPrice)}${varText}${extrasText} × ${c.qty} = <b>${brl(unitPrice*c.qty)}</b></small>
             ${obsText}
           </div>
@@ -214,7 +216,7 @@ function renderCart() {
 
 function openCart() {
   if (appliedCoupon) {
-    $('couponMsg').innerHTML = `<div class="coupon-ok">✅ Cupom "${appliedCoupon.code}" ativo</div>`;
+    $('couponMsg').innerHTML = `<div class="coupon-ok">✅ Cupom "${esc(appliedCoupon.code)}" ativo</div>`;
     $('couponInput').value = appliedCoupon.code;
   }
   $('overlayCart').classList.add('open');
@@ -227,8 +229,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!code) return;
     const r = applyCouponCode(code);
     $('couponMsg').innerHTML = r.ok
-      ? `<div class="coupon-ok">${r.msg}</div>`
-      : `<div class="coupon-err">❌ ${r.msg}</div>`;
+      ? `<div class="coupon-ok">${esc(r.msg)}</div>`
+      : `<div class="coupon-err">❌ ${esc(r.msg)}</div>`;
     renderCart();
   };
 

@@ -24,7 +24,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Yanone+Kaffeesatz:wght@500;600;700&family=Cuprum:wght@400;500;600&display=swap" rel="stylesheet">
 
-<link rel="stylesheet" href="css/style.css?v=5">
+  <link rel="stylesheet" href="css/style.css?v=6">
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
@@ -34,6 +34,8 @@
 ========================================================= */
 body:has(.admin-view.active) .client-only-store-header{display:none !important;}
 body:has(.admin-view.active) .client-only-footer{display:none !important;}
+/* Só o .admin-body rola: sem padding sobrando (footer do cardápio) e sem rolagem na página */
+body:has(.admin-view.active){padding-bottom:0; overflow:hidden;}
 
 .admin-view.active{height:100vh; min-height:100vh; overflow:hidden;}
 .admin-view.active .admin-sidebar{
@@ -607,13 +609,15 @@ body:has(.admin-view.active) .client-only-footer{display:none !important;}
             </div>
             <div class="form-group"><label>Instagram (apenas @usuario)</label><input id="cInsta" placeholder="bebidasexemplo"></div>
             <div class="form-row">
-              <div class="form-group" style="flex:3"><label>Rua</label><input id="cStreet" placeholder="Rua Santa Helena"></div>
-              <div class="form-group" style="flex:1"><label>Número</label><input id="cNumber" placeholder="410b"></div>
+              <div class="form-group"><label>CEP</label><input id="cZip" inputmode="numeric" autocomplete="off" maxlength="9" placeholder="00000-000"></div>
+              <div class="form-group"><label>Número *</label><input id="cNumber" inputmode="numeric" placeholder="410"></div>
             </div>
             <div class="form-row">
-              <div class="form-group" style="flex:2"><label>Bairro</label><input id="cDistrict" placeholder="Pajuçara"></div>
-              <div class="form-group" style="flex:2"><label>Cidade</label><input id="cCity" placeholder="Cidade"></div>
-              <div class="form-group" style="flex:1"><label>CEP</label><input id="cZip" inputmode="numeric" autocomplete="off" maxlength="9" placeholder="00000-000"></div>
+              <div class="form-group" style="grid-column:1/-1"><label>Rua</label><input id="cStreet" placeholder="Preenchido pelo CEP" autocomplete="address-line1"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label>Bairro</label><input id="cDistrict" placeholder="Preenchido pelo CEP" autocomplete="address-level2"></div>
+              <div class="form-group"><label>Cidade</label><input id="cCity" placeholder="Preenchido pelo CEP" autocomplete="address-level2"></div>
             </div>
           </div>
           <div class="cfg-card">
@@ -722,6 +726,12 @@ body:has(.admin-view.active) .client-only-footer{display:none !important;}
             <p>Senha, backup e zona de perigo</p></div>
         </div>
         <div class="cfg-grid">
+          <div class="cfg-card">
+            <h3>🔔 Avisos de Pedido</h3>
+            <p class="hint">Som e aviso no painel já funcionam quando um pedido entra.</p>
+            <button class="btn ghost full" id="btnNotifyPerm">🔔 Ativar notificações do sistema</button>
+            <p class="hint" id="notifyHint" style="margin-top:8px"></p>
+          </div>
           <div class="cfg-card">
             <h3>🔑 Senha do Admin</h3>
             <div class="form-group"><label>Senha atual</label><input type="password" id="secOldPass"></div>
@@ -1148,20 +1158,20 @@ body:has(.admin-view.active) .client-only-footer{display:none !important;}
 <div id="printSheet" class="print-sheet"></div>
 
 <!-- SCRIPTS -->
-<script src="js/vendor/qrcode.min.js?v=5"></script>
-<script src="js/state.js?v=5"></script>
-<script src="js/menu.js?v=5"></script>
-<script src="js/cart.js?v=5"></script>
-<script src="js/checkout.js?v=5"></script>
-<script src="js/admin-login.js?v=5"></script>
-<script src="js/admin-dashboard.js?v=5"></script>
-<script src="js/admin-log.js?v=5"></script>
-<script src="js/admin.js?v=5"></script>
-<script src="js/admin-orders.js?v=5"></script>
-<script src="js/admin-melhorias.js?v=5"></script>
-<script src="js/admin-pedidos-view.js?v=5"></script>
-<script src="js/backup.js?v=5"></script>
-<script src="js/app.js?v=4"></script>
+  <script src="js/vendor/qrcode.min.js?v=6"></script>
+  <script src="js/state.js?v=6"></script>
+  <script src="js/menu.js?v=6"></script>
+  <script src="js/cart.js?v=6"></script>
+  <script src="js/checkout.js?v=6"></script>
+  <script src="js/admin-login.js?v=6"></script>
+  <script src="js/admin-dashboard.js?v=6"></script>
+  <script src="js/admin-log.js?v=6"></script>
+  <script src="js/admin.js?v=6"></script>
+  <script src="js/admin-orders.js?v=6"></script>
+  <script src="js/admin-melhorias.js?v=6"></script>
+  <script src="js/admin-pedidos-view.js?v=6"></script>
+  <script src="js/backup.js?v=6"></script>
+  <script src="js/app.js?v=6"></script>
 
 </body>
 </html>

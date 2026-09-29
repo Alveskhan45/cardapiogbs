@@ -588,9 +588,10 @@ footer .powered{margin-top:20px;font-size:.75rem;color:#666}
 .track-step.done .track-dot{background:var(--success);color:#fff}
 .track-step.active .track-dot{background:var(--info);color:#fff;box-shadow:0 0 0 6px rgba(59,130,246,.14)}
 .track-step.canceled .track-dot{background:var(--danger);color:#fff}
-.track-label{flex:1;padding-top:6px}
-.track-label b{display:block;text-transform:capitalize;font-size:.92rem}
+.track-label{flex:1;padding-top:6px;display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.track-label b{display:block;text-transform:capitalize;font-size:.92rem;flex:1;min-width:0}
 .track-label small{color:var(--muted);font-size:.8rem}
+.track-label .track-when{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:600}
 .track-step.done .track-label b{color:var(--success)}
 .track-step.active .track-label b{color:var(--info)}
 .track-step.canceled .track-label b{color:var(--danger)}

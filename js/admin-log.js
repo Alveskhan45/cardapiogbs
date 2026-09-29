@@ -10,9 +10,9 @@ function renderAdminLog() {
 
   el.innerHTML = '<div class="log-list">' + state.adminLog.map(l => `
     <div class="log-item">
-      <div class="log-ico">${l.icon}</div>
+      <div class="log-ico">${esc(l.icon)}</div>
       <div class="log-body">
-        <strong>${l.text}</strong>
+        <strong>${esc(l.text)}</strong>
         <small>${fmtDateTime(l.date)} • ${timeAgo(l.date)}</small>
       </div>
     </div>
@@ -41,7 +41,7 @@ function renderStockLogList() {
 
   el.innerHTML = state.stockLog.slice(0, 15).map(l => `
     <div class="dash-item">
-      <span>${l.icon} ${l.text}</span>
+      <span>${esc(l.icon)} ${esc(l.text)}</span>
       <small style="color:var(--muted);font-size:.75rem">${timeAgo(l.date)}</small>
     </div>
   `).join('');

@@ -58,6 +58,16 @@ let state = {
 const $ = id => document.getElementById(id);
 const uid = () => '_' + Math.random().toString(36).slice(2,9);
 const brl = v => 'R$ ' + (Number(v)||0).toFixed(2).replace('.',',');
+
+/* Escapa texto para uso dentro de HTML/atributos. Toda string que venha do
+   cliente (pedido, observação, busca) ou do config passa por aqui antes de ir
+   para innerHTML — é a defesa contra XSS armazenado. */
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 const localDay = iso => new Date(new Date(iso).getTime() - 3*3600*1000).toISOString().slice(0,10);
 
 const cepDigits = v => String(v || '').replace(/\D/g, '');
@@ -107,6 +117,7 @@ function toast(msg, ms=2200) {
 }
 
 function closeAll() {
+  if (typeof _confirmCancel === 'function') _confirmCancel();
   document.querySelectorAll('.overlay').forEach(o => o.classList.remove('open'));
 }
 
@@ -150,6 +161,15 @@ function maybeAutoBackup() {
 /* ==================== SINCRONIZAÇÃO ==================== */
 const TOKEN_KEY = KEY + '_admin_token';
 let SERVER_OK = false;
+
+/* Mantém o pílula "online/offline" do topo sincronizada com o estado real.
+   Antes SERVER_OK só subia e a interface nunca era repintada. */
+function setServerOk(v) {
+  v = !!v;
+  if (SERVER_OK === v) return;
+  SERVER_OK = v;
+  if (typeof setConnUI === 'function') setConnUI(v ? 'on' : 'off');
+}
 let _pushTimer = null;
 
 function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
@@ -176,8 +196,14 @@ async function api(path, opts = {}) {
   }
   try {
     const r = await fetch(path, o);
-    return await r.json();
+    let body = null;
+    try { body = await r.json(); }
+    catch (e) { body = { ok: false, error: 'Resposta inválida do servidor' }; }
+    if (body && typeof body === 'object') body.status = r.status;
+    return body;
   } catch (e) {
+    /* null = rede fora / timeout. Quem chama precisa distinguir disso de um
+       erro do servidor (que vem como objeto com .status). */
     return null;
   } finally {
     if (ctrl) clearTimeout(o.__timer);
@@ -188,6 +214,7 @@ async function api(path, opts = {}) {
 function serverPayload() {
   const cfg = Object.assign({}, state.config);
   delete cfg.adminPassword;
+  delete cfg.adminPasswordHash;
   return {
     products: state.products,
     orders: state.orders,
@@ -217,7 +244,13 @@ function applyServerState(data) {
 }
 
 function saveLocalOnly() {
-  localStorage.setItem(KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(KEY, JSON.stringify(state));
+  } catch (e) {
+    /* QuotaExceeded (banner base64 enche o armazenamento): avisar em vez de
+       deixar a exceção estourar na função que chamou save(). */
+    toast('⚠️ Espaço do navegador cheio — não consegui salvar localmente', 5000);
+  }
 }
 
 function scheduleServerPush() {
@@ -233,6 +266,8 @@ async function pushState() {
   if (res && res.ok === false && (res.error === 'Não autorizado' || res.status === 401)) {
     setToken('');
   }
+  /* null = falha de rede/timeout: derruba o indicador em vez de fingir online */
+  if (!res) setServerOk(false);
 }
 
 async function pullPublic() {
@@ -241,10 +276,11 @@ async function pullPublic() {
   if (res && res.ok && res.state) {
     applyServerState(res.state);
     saveLocalOnly();
-    SERVER_OK = true;
+    setServerOk(true);
     if (typeof renderContactInfo === 'function') renderContactInfo();
     return true;
   }
+  setServerOk(false);
   return false;
 }
 
@@ -303,10 +339,11 @@ async function pullAdmin() {
   if (res && res.ok && res.state) {
     applyServerState(res.state);
     saveLocalOnly();
-    SERVER_OK = true;
+    setServerOk(true);
     if (typeof renderContactInfo === 'function') renderContactInfo();
     return true;
   }
+  setServerOk(false);
   return false;
 }
 
@@ -348,9 +385,9 @@ async function restoreAutoBackup(key) {
   try { snap = JSON.parse(raw); } catch (e) { return false; }
   const data = snap.data || snap;
   const msg = `Restaurar o backup de ${snap.at ? new Date(snap.at).toLocaleString('pt-BR') : 'data desconhecida'}?\nOs dados atuais serão substituídos.`;
-  let confirmed = false;
-  await new Promise(resolve => showConfirm(msg, () => { confirmed = true; resolve(); }));
-  if (!confirmed) return false;
+  const ok = await new Promise(resolve =>
+    showConfirm(msg, () => resolve(true), 'Confirmar', () => resolve(false)));
+  if (!ok) return false;
   state = Object.assign({}, state, data, { adminLog: data.adminLog || [], stockLog: data.stockLog || [] });
   save();
   if (typeof renderCats === 'function') renderCats();
@@ -403,11 +440,6 @@ function verifyPass(pass, stored) {
     return Promise.resolve(s === 'plain$bebidas::' + (pass || ''));
   }
   return Promise.resolve(s === pass);
-}
-
-function passwordNeedsMigration(stored) {
-  const s = stored || '';
-  return s !== '' && s.indexOf('sha256$') !== 0;
 }
 
 async function load() {
@@ -573,7 +605,7 @@ function applyThemePreset(pid) {
 
 /* ==================== MEUS PEDIDOS ==================== */
 const MY_ORDERS_KEY = KEY + '_my_orders';
-function getMyOrders() { try { return JSON.parse(localStorage.getItem(MY_ORDERS_KEY) || '[]'); } catch(e) { return []; } }
+function getMyOrders() { try { const l = JSON.parse(localStorage.getItem(MY_ORDERS_KEY) || '[]'); return Array.isArray(l) ? l : []; } catch(e) { return []; } }
 function saveMyOrders(l) { try { localStorage.setItem(MY_ORDERS_KEY, JSON.stringify(l)); } catch(e) {} }
 function pushMyOrder(record) {
   const l = getMyOrders();
@@ -581,15 +613,35 @@ function pushMyOrder(record) {
   saveMyOrders(l.slice(0, 20));
 }
 
+/* ==================== CÓDIGOS DE ACOMPANHAMENTO ====================
+   O código é mostrado uma única vez, na tela de sucesso, e o cliente pode
+   fechar/limpar a tela sem querer. Guardamos o que ele recebeu e o que ele
+   consultou para o botão "Acompanhar meu pedido" abrir no pedido certo. */
+const TRACKS_KEY = KEY + '_my_tracks';
+
+function getMyTracks() {
+  const out = [];
+  const add = c => {
+    c = String(c || '').trim().toUpperCase();
+    if (c && out.indexOf(c) === -1) out.push(c);
+  };
+  try { (JSON.parse(localStorage.getItem(TRACKS_KEY) || '[]') || []).forEach(add); } catch (e) {}
+  getMyOrders().forEach(o => add(o && o.trackCode));
+  return out.slice(0, 5);
+}
+
+function saveMyTrack(code) {
+  const c = String(code || '').trim().toUpperCase();
+  if (!c) return;
+  const list = getMyTracks().filter(x => x !== c);
+  list.unshift(c);
+  try { localStorage.setItem(TRACKS_KEY, JSON.stringify(list.slice(0, 5))); } catch (e) {}
+}
+
 /* ==================== ENDEREÇOS ==================== */
 const ADDR_KEY = KEY + '_addresses';
 function getSavedAddresses() { try { return JSON.parse(localStorage.getItem(ADDR_KEY) || '[]'); } catch(e) { return []; } }
 function saveAddresses(l) { try { localStorage.setItem(ADDR_KEY, JSON.stringify(l)); } catch(e) {} }
-function addSavedAddress(rec) {
-  const l = getSavedAddresses().filter(a => !(a.name === rec.name && a.address === rec.address));
-  l.unshift(rec);
-  saveAddresses(l.slice(0, 5));
-}
 
 /* ==================== +18 ==================== */
 const AGE_KEY = KEY + '_ageok';
@@ -643,15 +695,6 @@ function pixPayload(amount, key, name, city, txid) {
   p += pixFld('62', pixFld('05', txid || '*', 25), 99);
   p += '6304';
   return p + crc16CCITT(p);
-}
-function renderPixQR(container, payload, size) {
-  if (!container) return;
-  container.innerHTML = '';
-  if (window.QRCode) {
-    new QRCode(container, { text: payload, width: size || 180, height: size || 180, correctLevel: QRCode.CorrectLevel.M });
-  } else {
-    container.innerHTML = '<div style="font-size:.72rem;word-break:break-all;line-height:1.4">' + payload + '</div>';
-  }
 }
 
 /* ==================== LOG ==================== */

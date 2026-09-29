@@ -20,13 +20,6 @@
     return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
 
-  function esc(s) {
-    if (s == null) return '';
-    return String(s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-  }
-
   function timeAgo(ts) {
     if (!ts) return '';
     const t = new Date(ts).getTime();
@@ -135,7 +128,7 @@
           );
           if (found) {
             found.status = newStatus;
-            found.updatedAt = new Date().toISOString();
+            found.statusUpdatedAt = new Date().toISOString();
             localStorage.setItem(STATE_KEY, JSON.stringify(parsed));
             updated = true;
           }
@@ -148,7 +141,7 @@
         const f = window.state.orders.find(
           (o) => String(o.id) === String(rawId) || String(o.numero) === String(rawId)
         );
-        if (f) { f.status = newStatus; f.updatedAt = new Date().toISOString(); updated = true; }
+        if (f) { f.status = newStatus; f.statusUpdatedAt = new Date().toISOString(); updated = true; }
       }
     } catch (e) {}
 

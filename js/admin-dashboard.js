@@ -1,4 +1,16 @@
 /* ==================== DASHBOARD ==================== */
+
+/* "Pendente" para o KPI é tudo que ainda não terminou: enquanto o pedido não
+   for entregue nem cancelado, ele continua em aberto (pendente, em preparo
+   ou em entrega). Antes só o status "pendente" contava e o número zerava
+   assim que a loja aceitava o pedido. */
+function pedidoAberto(o) {
+  const s = String((o && o.status) || '').toLowerCase().trim();
+  if (s === 'cancelada') return false;
+  if (s === 'concluido' || s === 'concluído' || s === 'finalizado') return false;
+  return s !== 'entregue' && s !== 'cancelado';
+}
+
 function renderDashboard() {
   const valid = state.orders.filter(o => o.status !== 'cancelado');
 
@@ -9,10 +21,10 @@ function renderDashboard() {
   const el1 = $('kpiHoje'); if (el1) el1.textContent = brl(todayTotal);
   const el1s = $('kpiHojeSub'); if (el1s) el1s.textContent = todayOrders.length + ' pedido' + (todayOrders.length===1?'':'s');
 
-  // KPI: Pendentes
-  const pending = state.orders.filter(o => o.status === 'pendente').length;
+  // KPI: Pedidos em aberto (não entregues e não cancelados)
+  const pending = state.orders.filter(pedidoAberto).length;
   const el2 = $('kpiPend'); if (el2) el2.textContent = pending;
-  const el2s = $('kpiPendSub'); if (el2s) el2s.textContent = pending > 0 ? 'aguardando' : 'tudo em ordem';
+  const el2s = $('kpiPendSub'); if (el2s) el2s.textContent = pending > 0 ? 'em aberto' : 'tudo em ordem';
 
   // KPI: Estoque baixo
   const low = state.products.filter(p => p.active && p.stock <= state.config.minStock).length;
@@ -27,7 +39,13 @@ function renderDashboard() {
 
   // Badges da sidebar
   const sbProd = $('sbBadgeProd'); if (sbProd) sbProd.textContent = state.products.length;
-  const sbPed = $('sbBadgePed'); if (sbPed) sbPed.textContent = pending;
+  const sbPed = $('sbBadgePed');
+  if (sbPed) {
+    sbPed.textContent = pending;
+    /* Vermelho pulsando só quando tem serviço em aberto — em zero o badge
+       fica neutro em vez de continuar gritando. */
+    sbPed.classList.toggle('sb-badge-alert', pending > 0);
+  }
 
   // Gráfico
   renderChart();
@@ -41,7 +59,7 @@ function renderDashboard() {
     elTop.innerHTML = top.length
       ? top.map(([n,q],i) => `
           <div class="dash-item">
-            <span><b>${i+1}º</b> ${n}</span>
+            <span><b>${i+1}º</b> ${esc(n)}</span>
             <b>${q} un</b>
           </div>`).join('')
       : '<div class="dash-empty">Sem vendas ainda</div>';
@@ -57,7 +75,7 @@ function renderDashboard() {
     elAl.innerHTML = alertas.length
       ? alertas.map(p => `
           <div class="dash-item">
-            <span>${p.image && (p.image.startsWith('http')||p.image.startsWith('assets/')) ? '📷' : (p.image||'🥤')} ${p.name}</span>
+            <span>${p.image && (p.image.startsWith('http')||p.image.startsWith('assets/')) ? '📷' : esc(p.image||'🥤')} ${esc(p.name)}</span>
             <b style="color:${p.stock===0?'var(--danger)':'var(--warning)'}">${p.stock === 0 ? 'esgotado' : p.stock + ' un'}</b>
           </div>`).join('')
       : '<div class="dash-empty">✅ Estoque em dia</div>';
@@ -70,7 +88,7 @@ function renderDashboard() {
     elRec.innerHTML = recent.length
       ? recent.map(o => `
           <div class="dash-item">
-            <span>#${o.id} — ${o.customer}</span>
+            <span>#${esc(o.id)} — ${esc(o.customer)}</span>
             <b>${brl(o.total)}</b>
           </div>`).join('')
       : '<div class="dash-empty">Sem pedidos</div>';

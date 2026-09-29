@@ -3,19 +3,16 @@
 /* --- Indicador de conexão com o servidor --- */
 function setConnUI(status) {
   const pill = $('serverState');
-  const strip = $('connStrip');
-  if (!pill && !strip) return;
-  if (pill) {
-    pill.className = status === 'on' ? 'on' : (status === 'off' ? 'off' : 'syncing');
-    pill.textContent = status === 'on' ? 'online' : (status === 'off' ? 'offline' : 'sincronizando');
-  }
-  if (strip) strip.classList.toggle('show', status !== 'on');
+  if (!pill) return;
+  pill.className = status === 'on' ? 'on' : (status === 'off' ? 'off' : 'syncing');
+  pill.textContent = status === 'on' ? 'online' : (status === 'off' ? 'offline' : 'sincronizando');
 }
 
-// Global confirm modal
-let _confirmResolve = null;
-function showConfirm(msg, onOk) {
-  const title = arguments[2] || 'Confirmar';
+// Global confirm modal. onCancel cobre cancelar, Escape e closeAll() — sem ele
+// quem espera a Promise fica pendurado para sempre.
+let _confirmCancel = null;
+function showConfirm(msg, onOk, title, onCancel) {
+  const t = title || 'Confirmar';
   const overlay = $('overlayConfirm');
   if (!overlay) { if (onOk) onOk(); return; }
   const titleEl = $('confirmTitle');
@@ -23,10 +20,16 @@ function showConfirm(msg, onOk) {
   const okBtn = $('confirmOk');
   const cancelBtn = $('confirmCancel');
   if (!overlay || !titleEl || !msgEl || !okBtn || !cancelBtn) { if (onOk) onOk(); return; }
-  titleEl.textContent = title;
+  const dismiss = (fn) => {
+    overlay.classList.remove('open');
+    _confirmCancel = null;
+    if (fn) fn();
+  };
+  titleEl.textContent = t;
   msgEl.textContent = msg;
-  okBtn.onclick = () => { overlay.classList.remove('open'); if (onOk) onOk(); };
-  cancelBtn.onclick = () => overlay.classList.remove('open');
+  okBtn.onclick = () => dismiss(onOk);
+  cancelBtn.onclick = () => dismiss(onCancel);
+  _confirmCancel = () => dismiss(onCancel);
   overlay.classList.add('open');
 }
 
@@ -35,7 +38,7 @@ function renderContactInfo() {
   const phone = c.phone || c.whatsapp || '';
   const handle = c.instagram || (c.storeName || 'loja').toLowerCase().replace(/\s+/g,'');
   const top = $('topbarContact');
-  if (top) top.innerHTML = `📞 ${phone} <span style="margin:0 8px">|</span> @${handle}`;
+  if (top) top.innerHTML = `📞 ${esc(phone)} <span style="margin:0 8px">|</span> @${esc(handle)}`;
   const foot = $('ftPhone');
   if (foot) foot.textContent = 'Telefone: ' + phone;
 
@@ -93,12 +96,39 @@ function renderContactInfo() {
 /* ==================== ACOMPANHAR PEDIDO ==================== */
 const TRACK_STEPS = ['pendente', 'preparando', 'entregando', 'entregue'];
 const TRACK_LABELS = { pendente: 'Pedido recebido', preparando: 'Em preparo', entregando: 'Saiu para entrega', entregue: 'Entregue' };
+/* Status que não mudam mais: não faz sentido seguir consultando o servidor. */
+const TRACK_DONE = ['entregue', 'cancelado'];
 let _trackTimer = null;
 
 function trackStatusLabel(o) {
   if (!o) return '—';
   if (o.status === 'cancelado') return 'Cancelado';
   return TRACK_LABELS[o.status] || String(o.status);
+}
+
+function isTrackDone(o) {
+  return !!(o && TRACK_DONE.indexOf(o.status) !== -1);
+}
+
+/* Hora de cada etapa, vinda do statusHistory gravado pelo painel/servidor.
+   Pedido antigo sem histórico: cai para createdAt (início) e statusUpdatedAt
+   (etapa atual), sem inventar hora para o que não foi registrado. */
+function trackTimes(o) {
+  const map = {};
+  (Array.isArray(o.statusHistory) ? o.statusHistory : []).forEach(e => {
+    if (e && e.status && e.at) map[e.status] = e.at;
+  });
+  if (!map.pendente && o.createdAt) map.pendente = o.createdAt;
+  if (o.status && !map[o.status]) map[o.status] = o.statusUpdatedAt || o.createdAt;
+  return map;
+}
+
+function fmtTrackTime(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const sameDay = d.toDateString() === new Date().toDateString();
+  const hm = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return sameDay ? hm : d.toLocaleDateString('pt-BR') + ' ' + hm;
 }
 
 function stopTracking() {
@@ -109,34 +139,52 @@ function renderTrackBody(o, auto) {
   const body = $('trackBody');
   if (!body) return;
   const canceled = o.status === 'cancelado';
+  const done = isTrackDone(o);
+  /* `auto` só vale se o pedido ainda estiver em andamento. */
+  const live = !!auto && !done;
   const idx = TRACK_STEPS.indexOf(o.status);
+  const times = trackTimes(o);
   const steps = TRACK_STEPS.map((s, i) => {
     let cls = '', dot = i + 1;
     if (canceled) { cls = 'canceled'; dot = '✕'; }
-    else if (idx >= 0) { if (i < idx) { cls = 'done'; dot = '✓'; } else if (i === idx) { cls = 'active'; } }
+    else if (idx >= 0) {
+      /* Pedido concluído: todas as etapas viram ✓. Em andamento, a etapa
+         atual mostra o número para indicar onde ele parou. */
+      if (i < idx || (done && i === idx)) { cls = 'done'; dot = '✓'; }
+      else if (i === idx) { cls = 'active'; }
+    }
+    const when = times[s] ? fmtTrackTime(times[s]) : '';
     return `<div class="track-step ${cls}">
       <div class="track-dot">${dot}</div>
       <div class="track-label">
         <b>${TRACK_LABELS[s]}</b>
-        <small>${i === idx ? (canceled ? '' : 'estágio atual') : (i === 0 ? 'assim que a loja aceitar' : '')}</small>
+        ${when ? `<small class="track-when">${when}</small>` : ''}
       </div>
     </div>`;
   }).join('');
 
+  const waitMsg = done
+    ? '✅ Pedido entregue'
+    : (live ? '<div class="spinner"></div> Atualiza automaticamente a cada 15s' : '');
+
   body.innerHTML = `
     <div class="track-hero">
       <div class="succ-ico">${canceled ? '🚫' : (idx >= TRACK_STEPS.length - 1 ? '🎉' : '📦')}</div>
-      <h2>Pedido #${o.id}</h2>
-      <p><b style="text-transform:capitalize">${trackStatusLabel(o)}</b> • Total ${brl(o.total)}</p>
+      <h2>Pedido #${esc(o.id)}</h2>
+      <p><b style="text-transform:capitalize">${esc(trackStatusLabel(o))}</b> • Total ${brl(o.total)}</p>
     </div>
     <div class="track-steps">${steps}</div>
-    <p class="hint">🕒 Atualizado em ${fmtDateTime(o.statusUpdatedAt || o.createdAt)}</p>
-    <div class="track-wait">${auto
-      ? '<div class="spinner"></div> Atualiza automaticamente a cada 15s'
-      : '<button class="btn ghost sm" id="btnTrackRefresh">🔄 Atualizar agora</button>'}</div>
+    ${waitMsg ? `<div class="track-wait">${waitMsg}</div>` : ''}
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap">
+      <button class="btn ghost sm" id="btnTrackRefresh">🔄 Atualizar agora</button>
+      <button class="btn ghost sm" id="btnTrackOther">🔍 Outro código</button>
+    </div>
+    <p class="hint" style="text-align:center;margin-top:8px">Código: <b style="letter-spacing:2px">${esc(o.trackCode || '—')}</b></p>
   `;
   const ref = $('btnTrackRefresh');
   if (ref) ref.onclick = () => fetchTrack(o.trackCode, true);
+  const other = $('btnTrackOther');
+  if (other) other.onclick = () => { stopTracking(); renderTrackInput(); };
 }
 
 async function fetchTrack(code, fromRefresh) {
@@ -151,10 +199,17 @@ async function fetchTrack(code, fromRefresh) {
     if (local) { found = { id: local.id, status: local.status, total: local.total, trackCode: local.trackCode, statusUpdatedAt: local.statusUpdatedAt || local.createdAt, createdAt: local.createdAt, offline: true }; }
   }
   if (!found) {
-    $('trackBody').innerHTML = '<div class="empty">🚫 Pedido não encontrado.<br><small>Verifique o código digitado.</small></div>';
+    $('trackBody').innerHTML = '<div class="empty">🚫 Pedido não encontrado.<br><small>Verifique o código digitado.</small></div>' +
+      '<div style="text-align:center;margin-top:12px"><button class="btn ghost sm" id="btnTrackOther">🔍 Digitar outro código</button></div>';
+    const back = $('btnTrackOther');
+    if (back) back.onclick = renderTrackInput;
+    stopTracking();
     return;
   }
-  renderTrackBody(found, !found.offline);
+  /* Guarda o código: é ele que o cliente pode perder depois da tela de sucesso. */
+  saveMyTrack(found.trackCode || code);
+  const done = isTrackDone(found);
+  renderTrackBody(found, !found.offline && !done);
   if (found.offline && SERVER_OK) {
     if (found.status !== 'pendente') {
       const hint = document.createElement('p');
@@ -165,12 +220,43 @@ async function fetchTrack(code, fromRefresh) {
     }
   }
   stopTracking();
-  if (!found.offline) {
+  /* Entregue/cancelado: para de consultar o servidor. */
+  if (!found.offline && !done) {
     _trackTimer = setInterval(() => {
       if (!$('overlayTrack')?.classList.contains('open')) { stopTracking(); return; }
       fetchTrack(code, true);
     }, 15000);
   }
+}
+
+function renderTrackInput() {
+  const body = $('trackBody');
+  if (!body) return;
+  const saved = getMyTracks();
+  body.innerHTML = `
+    ${saved.length
+      ? `<p class="hint" style="margin-bottom:8px">📌 Códigos salvos neste aparelho:</p>
+         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+           ${saved.map(c => `<button class="btn ghost sm" data-track-chip="${esc(c)}" style="letter-spacing:2px">${esc(c)}</button>`).join('')}
+         </div>
+         <p class="hint" style="margin-bottom:12px">Ou digite outro código:</p>`
+      : `<p class="hint" style="margin-bottom:12px">Digite o código recebido ao fazer o pedido.</p>`}
+    <div style="display:flex;gap:8px">
+      <input id="trackCodeInput" placeholder="Ex: K7T2M" style="flex:1;text-transform:uppercase;letter-spacing:2px" autocomplete="off">
+      <button class="btn primary" id="btnTrackGo">Buscar</button>
+    </div>
+    <p class="hint" style="margin-top:10px">💡 O código aparece na confirmação do pedido (ex: #1234 • <b>K7T2M</b>).</p>
+  `;
+  const go = () => {
+    const v = ($('trackCodeInput')?.value || '').trim().toUpperCase();
+    if (v) fetchTrack(v, false);
+  };
+  $('btnTrackGo').onclick = go;
+  $('trackCodeInput').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+  body.querySelectorAll('[data-track-chip]').forEach(b => {
+    b.onclick = () => fetchTrack(b.getAttribute('data-track-chip'), false);
+  });
+  $('trackCodeInput').focus();
 }
 
 function openTrack(code) {
@@ -180,21 +266,11 @@ function openTrack(code) {
   $('overlayTrack').classList.add('open');
 
   if (!code) {
-    body.innerHTML = `
-      <p class="hint" style="margin-bottom:12px">Digite o código recebido ao fazer o pedido.</p>
-      <div style="display:flex;gap:8px">
-        <input id="trackCodeInput" placeholder="Ex: K7T2M" style="flex:1;text-transform:uppercase;letter-spacing:2px" autocomplete="off">
-        <button class="btn primary" id="btnTrackGo">Buscar</button>
-      </div>
-      <p class="hint" style="margin-top:10px">💡 O código aparece na confirmação do pedido (ex: #1234 • <b>K7T2M</b>).</p>
-    `;
-    const go = () => {
-      const v = ($('trackCodeInput')?.value || '').trim().toUpperCase();
-      if (v) fetchTrack(v, false);
-    };
-    $('btnTrackGo').onclick = go;
-    $('trackCodeInput').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
-    $('trackCodeInput').focus();
+    /* Já temos código guardado aqui? Abre direto no pedido — é o que o
+       cliente quer quando toca em "Acompanhar meu pedido". */
+    const saved = getMyTracks();
+    if (saved.length) { fetchTrack(saved[0], false); return; }
+    renderTrackInput();
     return;
   }
   body.innerHTML = '<div class="empty"><div class="spinner" style="border-color:#eee;border-top-color:var(--primary);margin:0 auto 10px"></div>Consultando pedido...</div>';
@@ -202,7 +278,6 @@ function openTrack(code) {
 }
 
 /* ==================== COMPARTILHAR CARDÁPIO ==================== */
-function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
 function shareMenu() {
   const c = state.config;
@@ -245,10 +320,13 @@ function printMenu() {
     items.forEach(p => {
       const price = p.promo && p.promoPrice ? p.promoPrice : p.price;
       const hasVar = p.variations && p.variations.length;
-      const extraNote = hasVar ? `<span class="ds">${esc(p.variations.map(v => v.name + (v.price ? ' (+' + v.price.toFixed(2).replace('.', ',') + ')' : '')).join(' • '))}</span>` : '';
+      /* Variação é aditivo (+R$): o "a partir de" é base + menor adicional. */
+      const minDelta = hasVar ? Math.min(...p.variations.map(v => Number(v.price) || 0)) : 0;
+      const fromPrice = price + minDelta;
+      const extraNote = hasVar ? `<span class="ds">${esc(p.variations.map(v => v.name + (v.price ? ' (+' + Number(v.price).toFixed(2).replace('.', ',') + ')' : '')).join(' › '))}</span>` : '';
       html += `<div class="ps-item">
         <div class="nm">${esc(p.name)}${p.promo ? ' <small style="color:#c00">🔥 promo</small>' : ''}${extraNote}<span class="ds">${esc(p.desc || '')}</span></div>
-        <div class="pr">${hasVar ? 'a partir de ' : ''}R$ ${price.toFixed(2).replace('.', ',')}</div>
+        <div class="pr">${hasVar ? 'a partir de ' : ''}R$ ${fromPrice.toFixed(2).replace('.', ',')}</div>
       </div>`;
     });
     html += `</div>`;
@@ -269,10 +347,10 @@ function openMyOrders() {
   el.innerHTML = list.length ? list.map(o => `
     <div class="my-order">
       <div class="mo-head">
-        <b>#${(o.id || (o.items || []).map(i => i.name).join('+')).toString()}</b>
-        <span class="mo-status ${o.status === 'entregue' ? 'ok' : (o.status === 'cancelado' ? '' : '')}">${o.status || 'pendente'}</span>
+        <b>#${esc((o.id || (o.items || []).map(i => i.name).join('+')).toString())}</b>
+        <span class="mo-status ${o.status === 'entregue' ? 'ok' : (o.status === 'cancelado' ? '' : '')}">${esc(o.status || 'pendente')}</span>
       </div>
-      <div class="mo-items">${(o.items || []).map(i => `<b>${i.qty}x</b> ${i.name}${i.variation ? ' (' + i.variation + ')' : ''}`).join(' • ')}</div>
+      <div class="mo-items">${(o.items || []).map(i => `<b>${i.qty}x</b> ${esc(i.name)}${i.variation ? ' (' + esc(i.variation) + ')' : ''}`).join(' • ')}</div>
       <div class="mo-foot">
         <span style="color:var(--primary);font-weight:700">${brl(o.total)}</span>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -401,10 +479,12 @@ async function init() {
   // Extra (tema, compartilhar, imprimir, favoritos, ordem, meus pedidos)
   bindExtras();
 
-  // Link direto: ?c=CODIGO ou /acompanhar?c=CODIGO
+  // Link direto: ?c=CODIGO ou /acompanhar (sem código: abre no último salvo)
   const params = new URLSearchParams(location.search);
   const trackCode = (params.get('c') || '').trim();
+  const naRotaAcompanhar = /\/acompanhar\/?$/.test(location.pathname);
   if (trackCode) openTrack(trackCode);
+  else if (naRotaAcompanhar) openTrack();
 
   // Sombra do header ao rolar
   const stickyEl = document.querySelector('.sticky');

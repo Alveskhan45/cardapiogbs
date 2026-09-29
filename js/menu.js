@@ -32,19 +32,20 @@ function productMatches(p, q) {
  * Destaca o termo buscado no texto (compara ignorando acentos)
  */
 function highlight(text, q) {
-  if (!q || !text) return text || '';
+  const raw = text == null ? '' : String(text);
+  if (!q || !raw) return esc(raw);
   const nq = norm(q);
-  if (!nq) return text;
+  if (!nq) return esc(raw);
   let plain = '', off = [];
-  for (let oi = 0; oi < text.length; oi++) {
-    const clean = String(text[oi]).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  for (let oi = 0; oi < raw.length; oi++) {
+    const clean = String(raw[oi]).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     if (clean) { plain += clean; off.push(oi); }
   }
   const i = plain.indexOf(nq);
-  if (i === -1) return text;
+  if (i === -1) return esc(raw);
   const start = off[i];
   const end = off[i + nq.length - 1] + 1;
-  return text.slice(0, start) + '<mark class="hl">' + text.slice(start, end) + '</mark>' + text.slice(end);
+  return esc(raw.slice(0, start)) + '<mark class="hl">' + esc(raw.slice(start, end)) + '</mark>' + esc(raw.slice(end));
 }
 
 /* Preço efetivo (promoção) */
@@ -112,7 +113,7 @@ function renderCats() {
   if (searching && pool.length === 0) {
     const div = document.createElement('div');
     div.className = 'search-empty';
-    div.innerHTML = `😕 Nenhum produto encontrado para "<b>${q}</b>"<br><small style="font-size:.8rem">Tente outro termo</small>`;
+    div.innerHTML = `😕 Nenhum produto encontrado para "<b>${esc(q)}</b>"<br><small style="font-size:.8rem">Tente outro termo</small>`;
     catNav.appendChild(div);
     return;
   }
@@ -152,7 +153,7 @@ function renderCats() {
     btn.innerHTML = `
       <span class="cat-info">
         <span class="cat-emoji">${emoji}</span>
-        <span>${cat}</span>
+        <span>${esc(cat)}</span>
       </span>
       <span style="display:flex;align-items:center;gap:8px">
         <span class="cat-count">${items.length}</span>
@@ -268,7 +269,7 @@ function renderBanner() {
   if (!bannerArea) return;
   const banners = [];
   if (state.config.blockWhenClosed && !isStoreOpen()) {
-    banners.push(`<div class="banner closed">🔒 <strong>Estamos fechados neste momento.</strong> Funcionamento: ${state.config.hours || '—'}. O envio de pedidos é liberado no horário de funcionamento.</div>`);
+    banners.push(`<div class="banner closed">🔒 <strong>Estamos fechados neste momento.</strong> Funcionamento: ${esc(state.config.hours || '—')}. O envio de pedidos é liberado no horário de funcionamento.</div>`);
   }
   bannerArea.classList.toggle('shape-round', state.config.bannerShape === 'round');
   bannerArea.classList.toggle('shape-square', state.config.bannerShape !== 'round');
@@ -287,15 +288,17 @@ function renderMenu() {
  * @param {string} q Termo de busca para destacar (opcional)
  */
 function renderItem(p, q = '') {
-  const basePrice = p.promo && p.promoPrice ? p.promoPrice : p.price;
   const hasVar = p.variations && p.variations.length;
   const hasExtras = p.extras && p.extras.length;
+  const basePrice = p.promo && p.promoPrice ? p.promoPrice : p.price;
   const out = p.stock <= 0;
-  const minVarPrice = hasVar ? Math.min(...p.variations.map(v => v.price || 0)) : basePrice;
-  const displayPrice = hasVar ? minVarPrice : basePrice;
+  /* Variação é aditivo (+R$): o "a partir de" é o preço base mais o menor
+     adicional, não o adicional sozinho. */
+  const minDelta = hasVar ? Math.min(...p.variations.map(v => Number(v.price) || 0)) : 0;
+  const displayPrice = basePrice + minDelta;
   const imgContent = p.image && (p.image.startsWith('http') || p.image.startsWith('data:') || p.image.startsWith('assets/'))
-    ? `<img src="${p.image}" alt="${p.name}" onerror="this.parentElement.innerHTML='🥤'">`
-    : (p.image || '🥤');
+    ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" onerror="this.parentElement.innerHTML='🥤'">`
+    : esc(p.image || '🥤');
   const flag = p.highlight ? '<span class="flag">⭐ Top</span>' : (p.promo ? '<span class="flag promo">🔥 Promo</span>' : '');
   const canQuick = !hasVar && !hasExtras && !out;
   const quickBtn = canQuick
@@ -311,7 +314,7 @@ function renderItem(p, q = '') {
         <div class="item-name">${highlight(p.name, q)}${out ? ' <span style="color:#6b7280;font-size:.75rem">(esgotado)</span>' : ''}</div>
         <div class="item-desc">${highlight(p.desc || '', q)}</div>
         <div class="item-price">
-          ${p.promo && p.promoPrice ? `<span class="old">${brl(basePrice)}</span>` : `<span style="font-size:.8rem">${hasVar ? 'a partir de ' : 'por '}</span>`}
+          ${p.promo && p.promoPrice ? `<span class="old">${brl(p.price + minDelta)}</span>` : `<span style="font-size:.8rem">${hasVar ? 'a partir de ' : 'por '}</span>`}
           <span class="value">${brl(displayPrice)}</span>
         </div>
       </div>
@@ -342,8 +345,8 @@ function openItemDetail(id) {
   const basePrice = p.promo && p.promoPrice ? p.promoPrice : p.price;
   const out = p.stock <= 0;
   const imgContent = p.image && (p.image.startsWith('http') || p.image.startsWith('data:') || p.image.startsWith('assets/'))
-    ? `<img class="detail-img" src="${p.image}" alt="${p.name}" onerror="this.outerHTML='<div class=\\'detail-emoji\\'>🥤</div>'">`
-    : `<div class="detail-emoji">${p.image||'🥤'}</div>`;
+    ? `<img class="detail-img" src="${esc(p.image)}" alt="${esc(p.name)}" onerror="this.outerHTML='<div class=\\'detail-emoji\\'>🥤</div>'">`
+    : `<div class="detail-emoji">${esc(p.image||'🥤')}</div>`;
 
   let variationsHtml = '';
   if (p.variations && p.variations.length) {
@@ -354,8 +357,8 @@ function openItemDetail(id) {
         ${p.variations.map((v,i) => `
           <label class="opt-item">
             <input type="radio" name="variation" value="${i}" ${i===0?'checked':''}>
-            <span class="oname">${v.name}</span>
-            <span class="oprice">${brl(v.price || 0)}</span>
+            <span class="oname">${esc(v.name)}</span>
+            <span class="oprice">${brl(basePrice + (Number(v.price) || 0))}</span>
           </label>`).join('')}
       </div>`;
   }
@@ -369,7 +372,7 @@ function openItemDetail(id) {
         ${p.extras.map((e,i) => `
           <label class="opt-item">
             <input type="checkbox" class="extra-cb" data-idx="${i}">
-            <span class="oname">${e.name}</span>
+            <span class="oname">${esc(e.name)}</span>
             <span class="oprice">${e.price ? '+ '+brl(e.price) : 'Grátis'}</span>
           </label>`).join('')}
       </div>`;
@@ -383,16 +386,16 @@ function openItemDetail(id) {
       <div class="gtitle">📌 Quem viu este, também levou</div>
       <div class="related-grid">
         ${rel.map(r => {
-          const emoji = r.image && (r.image.startsWith('http') || r.image.startsWith('data:') || r.image.startsWith('assets/')) ? '<span class="rel-emoji">🥤</span>' : `<span class="rel-emoji">${r.image || '🥤'}</span>`;
-          return `<button class="rel-card" data-rel="${r.id}">${emoji}<span class="rel-name">${r.name}</span><span class="rel-price">${brl(priceNow(r))}</span></button>`;
+          const emoji = r.image && (r.image.startsWith('http') || r.image.startsWith('data:') || r.image.startsWith('assets/')) ? '<span class="rel-emoji">🥤</span>' : `<span class="rel-emoji">${esc(r.image || '🥤')}</span>`;
+          return `<button class="rel-card" data-rel="${esc(r.id)}">${emoji}<span class="rel-name">${esc(r.name)}</span><span class="rel-price">${brl(priceNow(r))}</span></button>`;
         }).join('')}
       </div>
     </div>` : '';
 
   $('sheetItem').innerHTML = `
-    <div class="close-row"><h2>${p.name}</h2><button class="btn ghost" data-close>✕</button></div>
+    <div class="close-row"><h2>${esc(p.name)}</h2><button class="btn ghost" data-close>✕</button></div>
     ${imgContent}
-    <p class="subtitle">${p.desc||''}</p>
+    <p class="subtitle">${esc(p.desc||'')}</p>
     ${variationsHtml}
     ${extrasHtml}
     <div class="form-group">
@@ -416,7 +419,8 @@ function openItemDetail(id) {
   let qty = 1;
   const calcPrice = () => {
     const varRadio = document.querySelector('input[name="variation"]:checked');
-    let total = varRadio ? (p.variations[parseInt(varRadio.value)].price || 0) : basePrice;
+    const vAdd = varRadio ? (Number(p.variations[parseInt(varRadio.value)].price) || 0) : 0;
+    let total = basePrice + vAdd;
     document.querySelectorAll('.extra-cb:checked').forEach(cb => {
       total += p.extras[parseInt(cb.dataset.idx)].price || 0;
     });

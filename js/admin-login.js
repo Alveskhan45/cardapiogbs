@@ -78,30 +78,23 @@ async function tryLogin() {
     if (typeof renderAdmin === 'function') renderAdmin();
     return;
   }
-  if (msg) msg.innerHTML = '<p style="color:#d90429">Senha incorreta.</p>';
-}
-
-function afterLoginSuccess() {
-  closeAll();
-  unlockAdmin();
-  if (typeof openAdminPanel === 'function') openAdminPanel();
-  if (typeof renderAdmin === 'function') renderAdmin();
-  if (typeof toast === 'function') toast('✅ Bem-vindo!');
-  if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission();
-  }
+  /* Sem `res` a rede caiu — dizer "senha incorreta" aí só confunde. */
+  if (msg) msg.innerHTML = res && res.error
+    ? `<p style="color:#d90429">${esc(res.error)}</p>`
+    : '<p style="color:#d90429">Não consegui conectar ao servidor. Verifique a conexão e tente de novo.</p>';
 }
 
 function openAdminPanel() {
   $('viewAdmin').classList.add('active');
   $('viewMenu').classList.add('hidden');
-  ['topbar', 'stickyHeader', 'cartBar', 'connStrip'].forEach(id => $(id)?.classList.add('hidden'));
+  ['topbar', 'stickyHeader', 'cartBar'].forEach(id => $(id)?.classList.add('hidden'));
   switchAdminTab('dash');
   if (window.innerWidth <= 900 && !sessionStorage.getItem('admhint')) {
     sessionStorage.setItem('admhint', '1');
     setTimeout(() => toast('👆 Toque em \u201c☰ Menu\u201d no canto superior para ver as abas do painel.'), 600);
   }
   connectEvents();
+  updateNotifyBtn();
 }
 
 function closeAdminPanel() {
@@ -111,13 +104,39 @@ function closeAdminPanel() {
   setToken('');
   $('viewAdmin').classList.remove('active');
   $('viewMenu').classList.remove('hidden');
-  ['topbar', 'stickyHeader', 'connStrip'].forEach(id => $(id)?.classList.remove('hidden'));
+  /* cartBar precisa voltar junto: senão a barra do carrinho some para sempre */
+  ['topbar', 'stickyHeader', 'cartBar'].forEach(id => $(id)?.classList.remove('hidden'));
 }
 
 /* ==================== TEMPO REAL (SSE) — aviso de novo pedido ==================== */
 let eventSource = null;
 let lastKnownOrderMax = 0;
+let orderMaxSeeded = false;
 let audioCtx = null;
+
+/* Semeia o contador com o estado que já está carregado (o login traz o state).
+   Sem isso o primeiro pedido da loja nunca era "novo": a condição era
+   `maxNow > 0`, e com a loja vazia (contador 0) o #1 passava em silêncio. */
+function seedOrderMax() {
+  lastKnownOrderMax = (state.orders || []).reduce((m, o) => Math.max(m, Number(o.id) || 0), 0);
+  orderMaxSeeded = true;
+}
+
+/* Compara o maior id com o último visto e avisa só quando ele sobe.
+   Queda de número (servidor renumera #1, #2…) só reseta o contador —
+   nunca vira "novo pedido". */
+function detectNewOrder(maxNow) {
+  const prev = orderMaxSeeded ? lastKnownOrderMax : -1;
+  orderMaxSeeded = true;
+  if (prev < 0) { lastKnownOrderMax = maxNow; return; }
+  if (maxNow > prev) {
+    const fresh = (state.orders || []).find(o => Number(o.id) === Number(maxNow));
+    notifyNewOrder(fresh || {});
+    lastKnownOrderMax = maxNow;
+  } else if (maxNow < prev) {
+    lastKnownOrderMax = maxNow;
+  }
+}
 
 function beepNewOrder() {
   try {
@@ -139,28 +158,78 @@ function beepNewOrder() {
 
 function notifyNewOrder(o) {
   beepNewOrder();
+  const linha = (o && o.id)
+    ? `🛒 Novo pedido #${o.id} — ${o.customer || '—'} — ${brl(o.total || 0)}`
+    : '🛒 Novo pedido!';
+  /* Toast só existe dentro do painel desbloqueado (o chamador já valida).
+     Nunca é mostrado para quem está só vendo o cardápio. */
+  if (typeof toast === 'function') toast(linha, 8000);
   try {
     if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('🛒 Novo pedido!', { body: `#${o.id} • ${o.customer || '—'} • ${brl(o.total || 0)}` });
+      new Notification('🛒 Novo pedido!', {
+        body: (o && o.id) ? `#${o.id} • ${o.customer || '—'} • ${brl(o.total || 0)}` : 'Um novo pedido entrou no painel.',
+        tag: 'novo-pedido'
+      });
     }
   } catch (e) {}
 }
 
+/* ==================== PERMISSÃO DE NOTIFICAÇÃO (só por clique) ==================== */
+function notifyPermState() {
+  if (typeof Notification === 'undefined') return 'unsupported';
+  return Notification.permission;
+}
+
+function updateNotifyBtn() {
+  const btn = $('btnNotifyPerm');
+  const hint = $('notifyHint');
+  if (!btn) return;
+  const st = notifyPermState();
+  let txt = '', h = '';
+  if (st === 'unsupported') {
+    txt = '🔕 Notificações não suportadas neste navegador';
+    btn.disabled = true;
+  } else if (st === 'granted') {
+    txt = '🔔 Notificações ativadas';
+    btn.disabled = true;
+    h = 'Você receberá um aviso do sistema a cada pedido novo.';
+  } else if (st === 'denied') {
+    txt = '🔕 Notificação bloqueada pelo navegador';
+    btn.disabled = false;
+    h = 'Libere o site nas permissões do navegador (ícone ao lado da barra de endereço).';
+  } else {
+    txt = '🔔 Ativar notificações do sistema';
+    btn.disabled = false;
+    h = 'Som e aviso no painel já funcionam. Esta opção mostra o aviso também com outra aba em foco.';
+  }
+  btn.textContent = txt;
+  if (hint) hint.textContent = h;
+}
+
+/* Nunca é chamada sozinha: precisa de um clique (regra do navegador) e
+   não faz nada se o painel não estiver desbloqueado. */
+async function requestNotifyPerm() {
+  if (typeof Notification === 'undefined') { toast('Este navegador não tem notificações'); return; }
+  try {
+    const p = await Notification.requestPermission();
+    if (p === 'granted') toast('🔔 Notificações ativadas');
+    else if (p === 'denied') toast('🔕 Bloqueada — libere nas permissões do navegador');
+    else toast('🔔 Ativação cancelada');
+  } catch (e) {
+    toast('Não foi possível ativar as notificações');
+  }
+  updateNotifyBtn();
+}
+
 function connectEvents() {
+  seedOrderMax();
   if (typeof EventSource === 'undefined' || !SERVER_OK) return;
   try {
     eventSource = new EventSource('/api/events');
     eventSource.addEventListener('sync', async () => {
       if (!isAdminUnlocked()) return;
-      const maxBefore = state.orders.reduce((m, o) => Math.max(m, o.id || 0), 0);
       if (await pullAdmin()) {
-        const maxNow = state.orders.reduce((m, o) => Math.max(m, o.id || 0), 0);
-        if (lastKnownOrderMax > 0 && maxNow > lastKnownOrderMax) {
-          const fresh = state.orders.find(o => o.id === maxNow);
-          notifyNewOrder(fresh || {});
-        }
-        if (lastKnownOrderMax === 0) lastKnownOrderMax = Math.max(maxBefore, maxNow);
-        else lastKnownOrderMax = Math.max(lastKnownOrderMax, maxNow);
+        detectNewOrder((state.orders || []).reduce((m, o) => Math.max(m, Number(o.id) || 0), 0));
         renderAdmin();
       }
     });
@@ -173,15 +242,8 @@ function startPollingFallback() {
   if (pollTimer) return;
   pollTimer = setInterval(async () => {
     if (!isAdminUnlocked()) return;
-    const maxBefore = state.orders.reduce((m, o) => Math.max(m, o.id || 0), 0);
     if (await pullAdmin()) {
-      const maxNow = state.orders.reduce((m, o) => Math.max(m, o.id || 0), 0);
-      if (lastKnownOrderMax > 0 && maxNow > lastKnownOrderMax) {
-        const fresh = state.orders.find(o => o.id === maxNow);
-        notifyNewOrder(fresh || {});
-      }
-      if (lastKnownOrderMax === 0) lastKnownOrderMax = Math.max(maxBefore, maxNow);
-      else lastKnownOrderMax = Math.max(lastKnownOrderMax, maxNow);
+      detectNewOrder((state.orders || []).reduce((m, o) => Math.max(m, Number(o.id) || 0), 0));
       renderAdmin();
     }
   }, 10000);
@@ -227,11 +289,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnBackToMenu = $('btnBackToMenu');
   if (btnBackToMenu) btnBackToMenu.onclick = () => closeAdminPanel();
 
+  const btnNotifyPerm = $('btnNotifyPerm');
+  if (btnNotifyPerm) btnNotifyPerm.onclick = requestNotifyPerm;
+  updateNotifyBtn();
+
+  /* Escape fecha o diálogo aberto (comprado pelo app.js). Só sai do painel
+     quando não há overlay — senão quem estava vendo um pedido era expulso
+     do painel ao fechar a janela. Capture=true garante que esta checagem
+     rode antes do closeAll() do app.js. */
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && $('viewAdmin').classList.contains('active')) {
-      closeAdminPanel();
-    }
-  });
+    if (e.key !== 'Escape' || !$('viewAdmin').classList.contains('active')) return;
+    if (document.querySelector('.overlay.open')) return;
+    closeAdminPanel();
+  }, true);
 });
 
 /* ==================== NAVEGAÇÃO ENTRE ABAS ==================== */

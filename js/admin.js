@@ -58,7 +58,7 @@ function renderAdminProducts() {
     const price = p.promo && p.promoPrice ? p.promoPrice : p.price;
     const low = p.stock <= state.config.minStock;
     const imgContent = p.image && (p.image.startsWith('http')||p.image.startsWith('assets/')||p.image.startsWith('data:'))
-      ? `<img src="${p.image}">` : (p.image || '🥤');
+      ? `<img src="${esc(p.image)}">` : esc(p.image || '🥤');
     const flags = [];
     if (p.highlight) flags.push('⭐');
     if (p.promo) flags.push('🔥');
@@ -71,12 +71,12 @@ function renderAdminProducts() {
         <div class="prod-cell">
           <div class="prod-thumb">${imgContent}</div>
           <div>
-            <div class="prod-name">${p.name}</div>
+            <div class="prod-name">${esc(p.name)}</div>
             <div class="prod-flags">${flags.join(' ') || '—'}</div>
           </div>
         </div>
       </td>
-      <td>${p.category || '-'}</td>
+      <td>${esc(p.category || '-')}</td>
       <td><b>${brl(price)}</b>${p.promo && p.promoPrice ? `<br><small style="color:var(--muted);text-decoration:line-through">${brl(p.price)}</small>` : ''}</td>
       <td>${low ? `<span class="badge ${p.stock===0?'danger':'warn'}">${p.stock} ⚠️</span>` : `<span class="badge success">${p.stock}</span>`}</td>
       <td>${p.active !== false ? '<span class="badge success">Ativo</span>' : '<span class="badge gray">Inativo</span>'}</td>
@@ -171,7 +171,7 @@ function populateCategoryFilter() {
   if (!sel) return;
   const cur = sel.value;
   sel.innerHTML = '<option value="">Todas categorias</option>' +
-    state.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+    state.categories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
   sel.value = cur;
 }
 
@@ -197,7 +197,7 @@ function renderCategories() {
   tb.innerHTML = state.categories.map((c, i) => {
     const count = state.products.filter(p => p.category === c).length;
     return `<tr>
-      <td><b>${c}</b></td>
+      <td><b>${esc(c)}</b></td>
       <td>${categoryEmoji(c)}</td>
       <td>${count} produto${count===1?'':'s'}</td>
       <td>
@@ -205,8 +205,8 @@ function renderCategories() {
         <button class="btn sm ghost" data-down="${i}" ${i===state.categories.length-1?'disabled':''}>↓</button>
       </td>
       <td>
-        <button class="btn sm primary" data-rencat="${c}" title="Renomear">✏️</button>
-        <button class="btn sm danger" data-delcat="${c}" title="Excluir">🗑</button>
+        <button class="btn sm primary" data-rencat="${esc(c)}" title="Renomear">✏️</button>
+        <button class="btn sm danger" data-delcat="${esc(c)}" title="Excluir">🗑</button>
       </td>
     </tr>`;
   }).join('');
@@ -246,23 +246,6 @@ function addCategory() {
   $('catEmoji').value = '';
   $('overlayCategory').classList.add('open');
   setTimeout(() => $('catName').focus(), 100);
-}
-
-function showConfirm(msg, onOk) {
-  $('confirmTitle').textContent = 'Confirmar';
-  $('confirmMsg').textContent = msg;
-  const okBtn = $('confirmOk');
-  const cancelBtn = $('confirmCancel');
-  const overlay = $('overlayConfirm');
-  
-  okBtn.onclick = () => {
-    overlay.classList.remove('open');
-    onOk();
-  };
-  cancelBtn.onclick = () => {
-    overlay.classList.remove('open');
-  };
-  overlay.classList.add('open');
 }
 
 function editCategory(oldName) {
@@ -343,11 +326,11 @@ function renderAdminOrders() {
   tb.innerHTML = list.map(o => `
     <tr>
       <td><b>#${o.id}</b><br><small style="color:var(--muted)">${timeAgo(o.createdAt)}</small></td>
-      <td>${o.customer}${o.phone?`<br><small style="color:var(--muted)">${o.phone}</small>`:''}</td>
-      <td>${o.items.length} item${o.items.length===1?'':'s'}<br><small style="color:var(--muted)">${o.items.map(i=>`${i.qty}x ${i.name}`).slice(0,2).join(', ')}${o.items.length>2?'...':''}</small></td>
-      <td><b>${brl(o.total)}</b><br><small>${o.payment}</small></td>
+      <td>${esc(o.customer)}${o.phone?`<br><small style="color:var(--muted)">${esc(o.phone)}</small>`:''}</td>
+      <td>${o.items.length} item${o.items.length===1?'':'s'}<br><small style="color:var(--muted)">${esc(o.items.map(i=>`${i.qty}x ${i.name}`).slice(0,2).join(', '))}${o.items.length>2?'...':''}</small></td>
+      <td><b>${brl(o.total)}</b><br><small>${esc(o.payment)}</small></td>
       <td>${o.delivery ? brl(o.delivery) : '—'}</td>
-      <td><span class="status-pill s-${o.status}">${o.status}</span></td>
+      <td><span class="status-pill s-${esc(o.status)}">${esc(o.status)}</span></td>
       <td>
         <button class="btn sm primary" data-vieworder="${o.id}">👁 Ver</button>
         <button class="btn sm info" data-reorder="${o.id}" title="WhatsApp">📱</button>
@@ -393,7 +376,7 @@ function renderReport() {
   const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const topMax = Math.max(...top.map(([,q]) => q), 1);
   $('relTop').innerHTML = top.length
-    ? top.map(([n,q]) => `<div class="dash-item"><span><b>${q} un</b> • ${n}<br><small style="color:var(--muted)">${brl(revs[n]||0)}</small></span></div>`).join('')
+    ? top.map(([n,q]) => `<div class="dash-item"><span><b>${q} un</b> • ${esc(n)}<br><small style="color:var(--muted)">${brl(revs[n]||0)}</small></span></div>`).join('')
     : '<div class="dash-empty">Sem dados</div>';
 
   // Pagamentos
@@ -402,7 +385,7 @@ function renderReport() {
   const payArr = Object.entries(pays).sort((a,b)=>b[1]-a[1]);
   const totP = list.length || 1;
   $('relPag').innerHTML = payArr.length
-    ? payArr.map(([p,c]) => `<div class="dash-item"><span>${p}</span><div style="display:flex;align-items:center;gap:8px"><b>${c}</b><small style="color:var(--muted);width:34px;text-align:right">${Math.round(c/totP*100)}%</small></div></div>`).join('')
+    ? payArr.map(([p,c]) => `<div class="dash-item"><span>${esc(p)}</span><div style="display:flex;align-items:center;gap:8px"><b>${c}</b><small style="color:var(--muted);width:34px;text-align:right">${Math.round(c/totP*100)}%</small></div></div>`).join('')
     : '<div class="dash-empty">Sem dados</div>';
 
   // Tipo
@@ -410,7 +393,7 @@ function renderReport() {
   list.forEach(o => tipos[o.type] = (tipos[o.type]||0) + 1);
   const tpArr = Object.entries(tipos);
   $('relTipo').innerHTML = tpArr.length
-    ? tpArr.map(([t,c]) => `<div class="dash-item"><span>${t}</span><b>${c}</b></div>`).join('')
+    ? tpArr.map(([t,c]) => `<div class="dash-item"><span>${esc(t)}</span><b>${c}</b></div>`).join('')
     : '<div class="dash-empty">Sem dados</div>';
 
   // Cupons
@@ -418,7 +401,7 @@ function renderReport() {
   list.filter(o => o.coupon).forEach(o => cups[o.coupon] = (cups[o.coupon]||0) + 1);
   const cArr = Object.entries(cups);
   $('relCupons').innerHTML = cArr.length
-    ? cArr.map(([c,q]) => `<div class="dash-item"><span>${c}</span><b>${q}x</b></div>`).join('')
+    ? cArr.map(([c,q]) => `<div class="dash-item"><span>${esc(c)}</span><b>${q}x</b></div>`).join('')
     : '<div class="dash-empty">Sem dados</div>';
 
   // Curva ABC (por receita de produto, A=80%, B=15%, C=5%)
@@ -436,7 +419,7 @@ function renderReport() {
     else elABC.innerHTML = abcSorted.map(([n, rv]) => {
       acc += rv / abcTotal;
       const cls = acc <= 0.80 ? 'A' : (acc <= 0.95 ? 'B' : 'C');
-      return `<div class="dash-item"><span class="abc-enc">${cls}</span><span><b>${n}</b><br><small style="color:var(--muted)">${brl(rv)} • lucro ${brl(abcp[n]||0)}</small></span></div>`;
+      return `<div class="dash-item"><span class="abc-enc">${cls}</span><span><b>${esc(n)}</b><br><small style="color:var(--muted)">${brl(rv)} • lucro ${brl(abcp[n]||0)}</small></span></div>`;
     }).join('');
   }
 
@@ -491,7 +474,7 @@ function renderCoupons() {
     if (c.per > 0) badges.push(`<span class="badge gray">${c.per}x/cliente</span>`);
     return `
     <tr>
-      <td><b>${c.code}</b><br>${badges.join(' ')}</td>
+      <td><b>${esc(c.code)}</b><br>${badges.join(' ')}</td>
       <td>${valueText}</td>
       <td>${brl(c.min)}</td>
       <td>${c.uses||0}${c.limit?' / '+c.limit:''}</td>
@@ -554,7 +537,7 @@ function renderBairros() {
   if (!state.bairros.length) { tb.innerHTML = '<tr><td colspan="4" class="empty">Sem bairros cadastrados</td></tr>'; return; }
   tb.innerHTML = state.bairros.map(b => `
     <tr>
-      <td><b>${b.name}</b></td>
+      <td><b>${esc(b.name)}</b></td>
       <td>${brl(b.tax)}</td>
       <td>${b.km} km</td>
       <td>
@@ -617,7 +600,7 @@ function renderEstoque() {
       const low = p.stock <= state.config.minStock;
       const badge = p.stock <= 0 ? 'danger' : (low ? 'warn' : 'success');
       return `<tr>
-        <td><b>${p.name}</b></td>
+        <td><b>${esc(p.name)}</b></td>
         <td><span class="badge ${badge}">${p.stock} un</span></td>
         <td>
           <button class="btn sm ghost" data-stkadd="${p.id}" data-qty="1">+1</button>
@@ -849,7 +832,7 @@ async function geocodeByCep() {
   const cep = cepDigits($('cZip')?.value);
 
   if (cep.length !== 8) {
-    showGeoResult('Informe um CEP com 8 dígitos no campo CEP (acima) para buscar a loja com precisão.', true);
+    showGeoResult('Informe um CEP com 8 dígitos no campo CEP para buscar a loja com precisão.', true);
     toast('⚠️ CEP inválido — faltam dígitos');
     return;
   }
@@ -910,17 +893,23 @@ async function autoCoordsFromCep() {
   geoBusy = true;
   try {
     const j = await fetchJson('https://brasilapi.com.br/api/cep/v2/' + cep);
+    /* Endereço primeiro: rua, bairro e cidade entram mesmo se as coordenadas
+       falharem. O número continua intocado — é o único campo manual. */
+    const changed = applyCepToAddress(j);
     const c = j && j.location && j.location.coordinates;
     const lat = parseFloat(c && c.latitude), lng = parseFloat(c && c.longitude);
     if (isNaN(lat) || isNaN(lng)) throw new Error('coordenadas ausentes');
     setCoordsValue(lat, lng);
-    const changed = applyCepToAddress(j);
-    if (state.config.storeCoords !== $('cCoords').value) {
-      toast('📍 Localização da loja atualizada pelo CEP ' + maskCep(cep) + (changed ? ' — confira o endereço' : ''));
+    if (state.config.storeCoords !== $('cCoords').value || changed) {
+      toast('📍 Endereço preenchido pelo CEP ' + maskCep(cep) + (changed ? ' — confira e clique em 💾 Salvar' : ''));
     }
   } catch (e) {
     if (/HTTP 404/.test(e.message || '')) {
-      toast('⚠️ CEP não encontrado — a localização da loja não foi atualizada');
+      toast('⚠️ CEP não encontrado — confira os dígitos');
+      geoLastZip = '';
+    } else {
+      toast('⚠️ Não consegui consultar o CEP — tente de novo');
+      geoLastZip = '';
     }
   } finally {
     geoBusy = false;
@@ -1139,11 +1128,13 @@ async function changePassword() {
   const old = $('secOldPass').value;
   const p1 = $('secNewPass').value;
   const p2 = $('secConfirmPass').value;
-  if (p1.length < 4) { toast('Senha muito curta (mín. 4)'); return; }
+  if (p1.length < 8) { toast('Senha muito curta (mín. 8)'); return; }
   if (p1 !== p2) { toast('Senhas não conferem'); return; }
 
   const res = SERVER_OK ? await api('/api/admin/password', { method: 'POST', body: { old, new: p1 } }) : null;
   if (res && res.ok) {
+    /* O servidor derruba as sessões antigas e devolve uma nova para este aparelho */
+    if (res.token) setToken(res.token);
     if (res.adminPasswordHash) {
       state.config.adminPasswordHash = res.adminPasswordHash;
       save();
@@ -1205,9 +1196,9 @@ function updateImgPreview() {
   const v = $('pImg').value.trim();
   if (!el) return;
   if (v && (v.startsWith('http') || v.startsWith('assets/') || v.startsWith('data:'))) {
-    el.innerHTML = `<img src="${v}" onerror="this.parentElement.innerHTML='<span>🥤</span>'">`;
+    el.innerHTML = `<img src="${esc(v)}" onerror="this.parentElement.innerHTML='<span>🥤</span>'">`;
   } else {
-    el.innerHTML = `<span>${v || '🥤'}</span>`;
+    el.innerHTML = `<span>${esc(v) || '🥤'}</span>`;
   }
 }
 
@@ -1253,7 +1244,7 @@ function updateBannerPreview() {
   if (!el) return;
   const v = ($('cBannerUrl')?.value || '').trim();
   if (isImageSrc(v)) {
-    el.innerHTML = `<img src="${v}" onerror="this.parentElement.innerHTML='<span>Imagem não encontrada</span>'">`;
+    el.innerHTML = `<img src="${esc(v)}" onerror="this.parentElement.innerHTML='<span>Imagem não encontrada</span>'">`;
   } else {
     el.innerHTML = '';
   }
@@ -1331,7 +1322,7 @@ if (cBannerUrlInput) cBannerUrlInput.addEventListener('input', updateBannerPrevi
 function renderVariationsEditor() {
   $('variationList').innerHTML = tmpVariations.map((v,i) => `
     <div class="form-row" style="margin-bottom:6px">
-      <input placeholder="Nome (ex: 500ml)" value="${v.name||''}" data-vi="${i}" data-k="name">
+      <input placeholder="Nome (ex: 500ml)" value="${esc(v.name||'')}" data-vi="${i}" data-k="name">
       <div style="display:flex;gap:6px">
         <input type="number" step="0.01" placeholder="+R$" value="${v.price||0}" data-vi="${i}" data-k="price" style="flex:1">
         <button class="btn danger sm" data-rvi="${i}">✕</button>
@@ -1348,7 +1339,7 @@ function renderVariationsEditor() {
 function renderExtrasEditor() {
   $('extrasList').innerHTML = tmpExtras.map((e,i) => `
     <div class="form-row" style="margin-bottom:6px">
-      <input placeholder="Nome (ex: Copo com gelo)" value="${e.name||''}" data-ei="${i}" data-k="name">
+      <input placeholder="Nome (ex: Copo com gelo)" value="${esc(e.name||'')}" data-ei="${i}" data-k="name">
       <div style="display:flex;gap:6px">
         <input type="number" step="0.01" placeholder="+R$" value="${e.price||0}" data-ei="${i}" data-k="price" style="flex:1">
         <button class="btn danger sm" data-rei="${i}">✕</button>
@@ -1391,7 +1382,7 @@ function openProductModal(id) {
   const SEED_CATS = ['Refrigerantes','Sucos','Águas','Produto','Energéticos','Vinhos','Destilados','Combos','Petiscos'];
   const finalCats = cats.length ? cats : SEED_CATS;
   const select = $('pCat');
-  select.innerHTML = finalCats.map(c => `<option value="${c}">${c}</option>`).join('');
+  select.innerHTML = finalCats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
   $('overlayProduct').classList.add('open');
   setTimeout(() => $('pName').focus(), 100);
 }
@@ -1536,6 +1527,8 @@ document.addEventListener('DOMContentLoaded', () => {
     inpZip.addEventListener('input', () => {
       const d = cepDigits(inpZip.value).slice(0, 8);
       inpZip.value = d.length > 5 ? d.slice(0, 5) + '-' + d.slice(5) : d;
+      // CEP incompleto limpa o cache: digitar de novo o mesmo CEP repreenche
+      if (d.length !== 8) geoLastZip = '';
       updateCoordsHelp();
       scheduleAutoCoords();
     });

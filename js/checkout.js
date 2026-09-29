@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     closeAll();
-    $('cPayF').innerHTML = state.config.payments.map(p => `<option>${p}</option>`).join('');
+    $('cPayF').innerHTML = state.config.payments.map(p => `<option>${esc(p)}</option>`).join('');
     populateBairros();
     updateFreightFields();
     updateCoSummary();
@@ -62,16 +62,9 @@ function buildAddr() {
   return [$('cRuaF')?.value.trim(), $('cNumF')?.value.trim(), $('cBairroNomeF')?.value.trim(), $('cCepF')?.value.trim()].filter(Boolean).join(', ');
 }
 
-function fillAddr(str) {
-  if (!str) return;
-  const p = String(str).split(',').map(s => s.trim());
-  const set = (id, v) => { const el = $(id); if (el) el.value = v || ''; };
-  set('cRuaF', p[0]); set('cNumF', p[1]); set('cBairroNomeF', p[2]); set('cCepF', p[3]);
-}
-
 function saveMyAddress(addr) {
   if (!addr) return;
-  const list = getSavedAddresses().filter(a => a.toLowerCase() !== addr.toLowerCase());
+  const list = getSavedAddresses().filter(a => String(a).toLowerCase() !== addr.toLowerCase());
   list.unshift(addr);
   saveAddresses(list.slice(0, 8));
 }
@@ -89,7 +82,7 @@ function populateBairros() {
   const sel = $('cBairroF');
   if (!sel) return;
   sel.innerHTML = '<option value="">— Selecione —</option>' +
-    state.bairros.map(b => `<option value="${b.id}">${b.name} (${brl(b.tax)})</option>`).join('');
+    state.bairros.map(b => `<option value="${esc(b.id)}">${esc(b.name)} (${brl(b.tax)})</option>`).join('');
 }
 
 function updateFreightFields() {
@@ -239,7 +232,7 @@ function renderCoItems() {
       c.obs ? '📝 ' + c.obs : ''
     ].filter(Boolean).join(' • ');
     return `<div class="review-line">
-      <span class="rr-name"><b>${c.qty}x</b> ${p.name}${det ? `<br><small>${det}</small>` : ''}</span>
+      <span class="rr-name"><b>${c.qty}x</b> ${esc(p.name)}${det ? `<br><small>${esc(det)}</small>` : ''}</span>
       <span>${brl(unit * c.qty)}</span>
     </div>`;
   }).join('');
@@ -257,8 +250,8 @@ function renderCoInfo() {
   const pay = $('cPayF')?.value || '—';
   const phone = $('cPhoneF')?.value.trim() || '';
   el.innerHTML = `<div class="co-note">
-    <div>🛒 Tipo: <b>${type}</b> • 💳 Pagamento: <b>${pay}</b>${pay === 'Dinheiro' ? ' <span style="opacity:.8">(informe o troco acima, se precisar)</span>' : ''}</div>
-    <div>🕒 Entrega estimada: <b>${state.config.deliveryTime || '—'}</b></div>
+    <div>🛒 Tipo: <b>${esc(type)}</b> • 💳 Pagamento: <b>${esc(pay)}</b>${pay === 'Dinheiro' ? ' <span style="opacity:.8">(informe o troco acima, se precisar)</span>' : ''}</div>
+    <div>🕒 Entrega estimada: <b>${esc(state.config.deliveryTime || '—')}</b></div>
     ${state.config.minOrder > 0 ? `<div>💰 Pedido mínimo: <b>${brl(state.config.minOrder)}</b></div>` : ''}
     ${!phone ? '<div>📞 Dica: informe seu telefone para o entregador conseguir contato.</div>' : ''}
     <div>📲 Ao enviar, finalize no WhatsApp. Você receberá um <b>código</b> para acompanhar o pedido.</div>
@@ -304,6 +297,9 @@ function copyText(txt) {
 
 function showOrderSuccess(data) {
   const o = data || {};
+  /* Guarda o código na hora: é a única vez que ele é mostrado e o cliente
+     pode fechar a tela sem anotar. Ver state.js → getMyTracks(). */
+  if (o.trackCode) saveMyTrack(o.trackCode);
   $('succNum').textContent = '#' + (o.id || '—');
   $('succTotal').textContent = brl(o.total);
   $('succPay').textContent = o.payment || '—';
@@ -443,8 +439,10 @@ async function fallbackOrder(payload, meta) {
   const { sub, discount, del, tot } = calcTotals(freightOpts);
   const bairroName = bairroId ? (state.bairros.find(b => b.id === bairroId)?.name || '') : '';
   const trackCode = 'L' + Math.random().toString(36).slice(2,7).toUpperCase();
+  /* Número sequencial (1, 2, 3...) igual ao servidor — não Date.now(). */
+  const localNum = (state.orders || []).reduce((m, o) => Math.max(m, Number(o.id) || 0), 0) + 1;
   const order = {
-    id: Date.now(), trackCode, customer: name, phone, address: addr, type, payment, notes: obs, change,
+    id: localNum, trackCode, customer: name, phone, address: addr, type, payment, notes: obs, change,
     bairro: bairroName, km: km || null,
     items, subtotal: sub, discount,
     coupon: appliedCoupon ? appliedCoupon.code : '',

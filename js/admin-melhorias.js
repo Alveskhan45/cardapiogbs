@@ -12,13 +12,6 @@
     return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
 
-  function esc(s) {
-    if (s == null) return '';
-    return String(s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-  }
-
   function getOrders() {
     try { if (window.state && Array.isArray(window.state.orders)) return window.state.orders; } catch (e) {}
     try {
@@ -44,7 +37,7 @@
     return {
       raw: o,
       id: o.id != null ? o.id : (o.numero != null ? o.numero : null),
-      name: o.cliente || o.name || o.nome || 'Cliente',
+      name: o.customer || o.cliente || o.name || o.nome || 'Cliente',
       tel: o.telefone || o.phone || '',
       total: Number(o.total != null ? o.total : (o.valor || 0)),
       status: normStatus(o.status || 'pendente'),
@@ -62,13 +55,18 @@
     orders.forEach((o) => {
       const key = o.tel || o.name.toLowerCase();
       if (!map.has(key)) {
-        map.set(key, { name: o.name, tel: o.tel, count: 0, total: 0, lastAt: null, address: o.endereco });
+        map.set(key, { name: o.name, tel: o.tel, count: 0, total: 0, lastAt: null, lastId: null, lastStatus: '', address: o.endereco });
       }
       const c = map.get(key);
       c.count++;
       c.total += o.total;
       const t = o.createdAt ? new Date(o.createdAt).getTime() : 0;
-      if (t > (c.lastAt || 0)) c.lastAt = t;
+      /* Guarda o pedido mais recente: é ele que o botão "Ver" abre. */
+      if (c.lastId == null || t > (c.lastAt || 0)) {
+        c.lastAt = t;
+        c.lastId = o.id;
+        c.lastStatus = o.status;
+      }
       if (o.endereco) c.address = o.endereco;
     });
 
@@ -102,16 +100,37 @@
       tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Nenhum cliente ainda</td></tr>';
       return;
     }
-    tbody.innerHTML = filtered.map((c) => `
+    tbody.innerHTML = filtered.map((c, i) => `
       <tr>
         <td><b>${esc(c.name)}</b></td>
         <td>${esc(c.tel || '—')}</td>
         <td>${c.count}</td>
         <td>${money(c.total)}</td>
         <td>${c.lastAt ? new Date(c.lastAt).toLocaleDateString('pt-BR') : '—'}</td>
-        <td>—</td>
+        <td style="white-space:nowrap">
+          ${c.lastId != null ? `<button class="btn sm primary" data-cli-view="${i}" title="Ver último pedido">👁 Ver</button>` : ''}
+          <button class="btn sm info" data-cli-wa="${i}" title="WhatsApp">📱</button>
+        </td>
       </tr>
     `).join('');
+
+    tbody.querySelectorAll('[data-cli-view]').forEach((b) => {
+      b.onclick = () => {
+        const c = filtered[Number(b.getAttribute('data-cli-view'))];
+        if (c && c.lastId != null && typeof openOrderDetail === 'function') openOrderDetail(c.lastId);
+      };
+    });
+    tbody.querySelectorAll('[data-cli-wa]').forEach((b) => {
+      b.onclick = () => {
+        const c = filtered[Number(b.getAttribute('data-cli-wa'))];
+        if (!c) return;
+        const cfg = (typeof state !== 'undefined' && state.config) ? state.config : {};
+        let m = `Olá ${c.name}, tudo bem? Aqui é da ${(cfg.storeName || 'nossa loja')}.`;
+        if (c.lastId != null) m += `\nVi que seu último pedido foi o #${c.lastId}. Como podemos ajudar?`;
+        const numero = c.tel ? String(c.tel).replace(/\D/g, '') : String(cfg.whatsapp || '').replace(/\D/g, '');
+        window.open(`https://wa.me/${numero}?text=${encodeURIComponent(m)}`, '_blank');
+      };
+    });
   }
 
   /* ===================== ENTREGAS ===================== */

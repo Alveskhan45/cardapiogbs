@@ -910,11 +910,13 @@ async function geocodeByCep() {
 
   try {
     const j = await fetchCepData(cep);
+    /* Endereço primeiro, para o resumo abaixo refletir o que ficou na tela. */
+    applyCepToAddress(j);
     const c = j.coords;
     const lat = parseFloat(c && c.lat), lng = parseFloat(c && c.lng);
     if (!isNaN(lat) && !isNaN(lng)) {
       setCoordsValue(lat, lng);
-      toast('✅ Coordenadas preenchidas pelo CEP — clique em 💾 Salvar');
+      toast('✅ Endereço e coordenadas preenchidos pelo CEP — clique em 💾 Salvar');
     } else {
       toast('✅ Endereço preenchido pelo CEP — clique em 💾 Salvar');
     }
@@ -922,6 +924,8 @@ async function geocodeByCep() {
     showGeoResult('CEP encontrado: ' + (where || maskCep(cep)));
     updateCoordsHelp();
   } catch (e) {
+    clearAddressByCep();
+    updateCoordsHelp();
     const notFound = e && /HTTP 404/.test(e.message || '');
     showGeoResult(notFound
       ? 'Esse CEP não existe. Confira o número ou use "Buscar pelo endereço".'
@@ -933,17 +937,32 @@ async function geocodeByCep() {
   }
 }
 
-/* Preenche rua, bairro e cidade a partir do CEP. O número NÃO é tocado: ele é
-   a única parte que só o lojista sabe, e é o que faz o mapa cair na frente da loja. */
+/* Campos do endereço que o CEP preenche. O número fica de fora de propósito:
+   é a única parte que só o lojista sabe, e é ela que faz o mapa cair na
+   frente da loja em vez do meio da rua. */
+const CAMPOS_ENDERECO_CEP = ['cStreet', 'cDistrict', 'cCity'];
+
+/* Zera o endereço inteiro (rua, bairro e cidade) antes de preencher de novo.
+   Sem isso, o que a API não devolve deixaria o valor do CEP anterior na tela
+   e o lojista salvaria uma rua que não é a dele. O número NÃO é zerado. */
+function clearAddressByCep() {
+  let mudou = false;
+  CAMPOS_ENDERECO_CEP.forEach(id => {
+    const el = $(id);
+    if (el && el.value) { el.value = ''; mudou = true; }
+  });
+  return mudou;
+}
+
+/* Preenche rua, bairro e cidade a partir do CEP. O número NÃO é tocado. */
 function applyCepToAddress(j) {
   if (!j) return false;
+  clearAddressByCep();
   let touched = false;
   const setIf = (id, val) => {
     const el = $(id);
     if (!el) return;
     const v = String(val || '').trim();
-    /* Campo vazio de propósito (bairro que a API não devolveu) NÃO pode
-       apagar o que o lojista já tinha digitado à mão. */
     if (v && el.value !== v) { el.value = v; touched = true; }
   };
   setIf('cStreet', j.street);
@@ -972,6 +991,10 @@ async function autoCoordsFromCep() {
       toast('📍 Endereço preenchido pelo CEP ' + maskCep(cep) + (changed ? ' — confira e clique em 💾 Salvar' : ''));
     }
   } catch (e) {
+    /* CEP inválido ou indisponível: o endereço fica vazio, senão a tela
+       mostra a rua do CEP anterior junto com o CEP novo. */
+    clearAddressByCep();
+    updateCoordsHelp();
     if (/HTTP 404/.test(e.message || '')) {
       toast('⚠️ CEP não encontrado — confira os dígitos');
       geoLastZip = '';

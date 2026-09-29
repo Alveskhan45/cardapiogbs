@@ -1,6 +1,13 @@
 /* ==================== ESTADO GLOBAL v6 ==================== */
 const KEY = 'bebidas_cardapio_v6';
 
+/* Revis��o da config que está no arquivo (veja o bloco config logo abaixo).
+   Ao editar a loja no site estático, aumente este número: aí o navegador
+   descarta a config velha que ele tinha guardado e passa a usar a nova.
+   Sem isso, quem já abriu o site antes continuaria vendo o número antigo,
+   porque o que está salvo no aparelho ganha do que está no arquivo. */
+const CFG_REV = 2;
+
 let state = {
   products: [],
   orders: [],
@@ -11,18 +18,27 @@ let state = {
   adminLog: [],
   stockLog: [],
   config: {
-    storeName: 'Produto',
-    slogan: 'Sua loja de produtos',
-    whatsapp: '5585987745402',
-    phone: '(85) 98774-5402',
-    instagram: 'bebidasexemplo',
-    address: 'Rua das estrelas, 1 - Jardim Paraíso',
+    /* ------------------------------------------------------------------
+       SITE ESTÁTICO (GitHub Pages): é AQUI que os dados da loja chegam
+       para todos os visitantes. Sem backend não existe de onde buscar, e
+       o painel só muda isso no navegador de quem está logado — trocar o
+       número no admin NÃO altera o que o cliente vê.
+       Ao mudar a loja: edite estas linhas, suba o CFG_REV e publique.
+       O mesmo número também está no seed do server.js.
+    ------------------------------------------------------------------ */
+    cfgRev: CFG_REV,
+    storeName: 'Gostinho de Amor',
+    slogan: 'O melhor em Bolos',
+    whatsapp: '5585985708628',
+    phone: '(85) 98570-8628',
+    instagram: 'gostinho de amor',
+    address: 'Rua Santa Helena, 410 - Pajuçara - Maracanaú',
     minOrder: 15,
     deliveryTime: '30-45 min',
-    openTime: '18:00',
+    openTime: '06:00',
     closeTime: '23:00',
     days: 'Seg, Ter, Qua, Qui, Sex, Sáb, Dom',
-    hours: 'Seg-Dom 18h-23h',
+    hours: 'Seg-Dom 06h-23h',
     freteMode: 'fixo',
     freteFixo: 5,
     freteKmVal: 2.5,
@@ -58,6 +74,11 @@ let state = {
 const $ = id => document.getElementById(id);
 const uid = () => '_' + Math.random().toString(36).slice(2,9);
 const brl = v => 'R$ ' + (Number(v)||0).toFixed(2).replace('.',',');
+
+/* Cópia do config que veio do arquivo. No site estático é a referência:
+   se a revisão do arquivo tiver novo valor, ela vence o que estiver salvo
+   no aparelho. */
+const CONFIG_SEED = Object.assign({}, state.config);
 
 /* Escapa texto para uso dentro de HTML/atributos. Toda string que venha do
    cliente (pedido, observação, busca) ou do config passa por aqui antes de ir
@@ -445,7 +466,18 @@ function verifyPass(pass, stored) {
 async function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) state = Object.assign({}, state, JSON.parse(raw));
+    if (raw) {
+      const salvo = JSON.parse(raw);
+      state = Object.assign({}, state, salvo);
+      /* Config: a do arquivo só é ignorada quando o aparelho guarda uma
+         da MESMA revisão. Se o dono editou a loja no arquivo, a revisão
+         subiu e a config salva no navegador vira velha — o resto do
+         estado (carrinho, pedidos salvos) continua como está. */
+      const revSalva = Number((salvo.config || {}).cfgRev || 0);
+      state.config = (revSalva === CFG_REV)
+        ? Object.assign({}, CONFIG_SEED, salvo.config)
+        : CONFIG_SEED;
+    }
   } catch(e){ console.warn(e); }
 
   // A detecção de backend é assíncrona: sem esperar, load() podia concluir antes

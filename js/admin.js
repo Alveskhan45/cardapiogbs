@@ -812,6 +812,73 @@ function setCoordsValue(lat, lng) {
   geoLastCoords = el.value;
 }
 
+/* ViaCEP primeiro: devolve logradouro, bairro, cidade E uf. A BrasilAPI é o
+   plano B porque entrega as coordenadas, mas costuma vir sem district/stateShort
+   — e é justamente o bairro que faltava no preenchimento automático. */
+function normalizeCepResponse(j) {
+  if (!j || typeof j !== 'object') return null;
+  if (j.erro || (j.status === 404)) return null;
+  /* ViaCEP */
+  if (j.logradouro !== undefined || j.localidade !== undefined) {
+    return {
+      street: j.logradouro || '',
+      district: j.bairro || '',
+      city: j.localidade || '',
+      stateShort: j.uf || '',
+      coords: null
+    };
+  }
+  /* BrasilAPI */
+  const c = j.location && j.location.coordinates;
+  return {
+    street: j.street || '',
+    district: j.district || '',
+    city: j.city || '',
+    stateShort: j.stateShort || '',
+    coords: c ? { lat: c.latitude, lng: c.longitude } : null
+  };
+}
+
+/* Junta o que cada fonte sabe, numa consulta só na tela: o ViaCEP traz
+   logradouro/bairro/cidade/uf, a BrasilAPI traz as coordenadas. As duas são
+   consultadas porque são coisas diferentes — parar na primeira que responda
+   deixaria as coordenadas sem preenchimento. Se uma cair, a outra cobre. */
+async function fetchCepData(cep) {
+  const fontes = [
+    () => fetchJson('https://viacep.com.br/ws/' + cep + '/json/'),
+    () => fetchJson('https://brasilapi.com.br/api/cep/v2/' + cep)
+  ];
+  let coords = null, partes = null, ultimaFalha = null;
+  for (const buscar of fontes) {
+    try {
+      const n = normalizeCepResponse(await buscar());
+      if (!n) { ultimaFalha = new Error('404'); continue; }
+      partes = partes || { street: '', district: '', city: '', stateShort: '' };
+      /* Cada fonte só preenche o que a outra deixou vazio. */
+      if (!partes.street && n.street) partes.street = n.street;
+      if (!partes.district && n.district) partes.district = n.district;
+      if (!partes.city && n.city) partes.city = n.city;
+      if (!partes.stateShort && n.stateShort) partes.stateShort = n.stateShort;
+      if (!coords && n.coords) coords = n.coords;
+    } catch (e) {
+      ultimaFalha = e;
+    }
+  }
+  if (!partes) throw ultimaFalha || new Error('HTTP 404');
+  return Object.assign({}, partes, { coords });
+}
+
+/* Grava as coordenadas e diz se mudaram de verdade. Sem coordenadas não é
+   erro: o ViaCEP não devolve e o CEP pode existir mesmo assim — o endereço
+   já foi preenchido e é isso que importa. */
+function setCoordsFrom(c) {
+  const lat = parseFloat(c && c.lat), lng = parseFloat(c && c.lng);
+  if (isNaN(lat) || isNaN(lng)) return false;
+  const antes = $('cCoords') ? $('cCoords').value : '';
+  setCoordsValue(lat, lng);
+  return antes !== $('cCoords').value;
+}
+
 async function fetchJson(url) {
   const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = setTimeout(() => { if (ctrl) ctrl.abort(); }, 15000);
@@ -824,8 +891,8 @@ async function fetchJson(url) {
   }
 }
 
-/* Caminho preciso: CEP → coordenadas pela BrasilAPI. CEP não tem ambiguidade
-   de nome de estabelecimento, então é o jeito mais confiável de locating a loja. */
+/* Caminho preciso: CEP → endereço e coordenadas. CEP não tem ambiguidade de
+   nome de estabelecimento, então é o jeito mais confiável de localizar a loja. */
 async function geocodeByCep() {
   if (geoBusy) return;
   const btn = $('btnGeoCep');
@@ -842,16 +909,18 @@ async function geocodeByCep() {
   showGeoResult(`Buscando pelo CEP ${maskCep(cep)}...`);
 
   try {
-    const j = await fetchJson('https://brasilapi.com.br/api/cep/v2/' + cep);
-    const c = j && j.location && j.location.coordinates;
-    const lat = parseFloat(c && c.latitude), lng = parseFloat(c && c.longitude);
-    if (isNaN(lat) || isNaN(lng)) throw new Error('coordenadas ausentes');
-
-    setCoordsValue(lat, lng);
+    const j = await fetchCepData(cep);
+    const c = j.coords;
+    const lat = parseFloat(c && c.lat), lng = parseFloat(c && c.lng);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      setCoordsValue(lat, lng);
+      toast('✅ Coordenadas preenchidas pelo CEP — clique em 💾 Salvar');
+    } else {
+      toast('✅ Endereço preenchido pelo CEP — clique em 💾 Salvar');
+    }
     const where = [j.street, j.district, j.city, j.stateShort].filter(Boolean).join(' — ');
     showGeoResult('CEP encontrado: ' + (where || maskCep(cep)));
     updateCoordsHelp();
-    toast('✅ Coordenadas preenchidas pelo CEP — clique em 💾 Salvar');
   } catch (e) {
     const notFound = e && /HTTP 404/.test(e.message || '');
     showGeoResult(notFound
@@ -871,13 +940,15 @@ function applyCepToAddress(j) {
   let touched = false;
   const setIf = (id, val) => {
     const el = $(id);
-    if (!el || !val) return;
-    const v = String(val).trim();
+    if (!el) return;
+    const v = String(val || '').trim();
+    /* Campo vazio de propósito (bairro que a API não devolveu) NÃO pode
+       apagar o que o lojista já tinha digitado à mão. */
     if (v && el.value !== v) { el.value = v; touched = true; }
   };
+  setIf('cStreet', j.street);
   setIf('cDistrict', j.district);
   setIf('cCity', j.city ? j.city + (j.stateShort ? '/' + j.stateShort : '') : '');
-  if (j.street) setIf('cStreet', j.street);
   return touched;
 }
 
@@ -892,15 +963,12 @@ async function autoCoordsFromCep() {
   geoLastZip = cep;
   geoBusy = true;
   try {
-    const j = await fetchJson('https://brasilapi.com.br/api/cep/v2/' + cep);
+    const j = await fetchCepData(cep);
     /* Endereço primeiro: rua, bairro e cidade entram mesmo se as coordenadas
        falharem. O número continua intocado — é o único campo manual. */
     const changed = applyCepToAddress(j);
-    const c = j && j.location && j.location.coordinates;
-    const lat = parseFloat(c && c.latitude), lng = parseFloat(c && c.longitude);
-    if (isNaN(lat) || isNaN(lng)) throw new Error('coordenadas ausentes');
-    setCoordsValue(lat, lng);
-    if (state.config.storeCoords !== $('cCoords').value || changed) {
+    const coordsMudaram = setCoordsFrom(j.coords);
+    if (coordsMudaram || changed) {
       toast('📍 Endereço preenchido pelo CEP ' + maskCep(cep) + (changed ? ' — confira e clique em 💾 Salvar' : ''));
     }
   } catch (e) {

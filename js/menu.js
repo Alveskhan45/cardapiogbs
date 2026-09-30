@@ -301,10 +301,11 @@ function renderItem(p, q = '') {
     : esc(p.image || '🥤');
   const flag = p.highlight ? '<span class="flag">⭐ Top</span>' : (p.promo ? '<span class="flag promo">🔥 Promo</span>' : '');
   const canQuick = !hasVar && !hasExtras && !out;
+  /* O preço aparece UMA vez so, na linha .item-price. O botao e apenas o "+". */
   const quickBtn = canQuick
-    ? `<button class="quick-add" data-qadd="${p.id}" title="Adicionar ao carrinho">${brl(displayPrice)}</button>`
+    ? `<button class="quick-add" data-qadd="${p.id}" title="Adicionar ao carrinho" aria-label="Adicionar ${esc(p.name)} ao carrinho">+</button>`
     : (!out && (hasVar || hasExtras)
-      ? `<button class="quick-add orange" data-qadd="${p.id}" title="Escolher opções">${brl(displayPrice)} ＋</button>`
+      ? `<button class="quick-add orange" data-qadd="${p.id}" title="Escolher opções" aria-label="Escolher opções de ${esc(p.name)}">+</button>`
       : '');
   return `
     <div class="item ${out ? 'out' : ''}" data-open="${p.id}" tabindex="0">

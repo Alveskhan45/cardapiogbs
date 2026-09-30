@@ -494,3 +494,63 @@ async function init() {
 
   // PWA: service worker desabilitado para atualização instantânea
 }
+
+/* ==================== VOLTAR DO CELULAR ====================
+   O cardápio é UMA página só e nunca usou a History API, então o
+   botão de voltar do celular saía do site em vez de fechar a tela.
+   Aqui existe exatamente UMA entrada de histórico enquanto houver
+   algo aberto: ela volta para o cardápio. Fechando por outro
+   caminho (X, tocar fora, Esc) a entrada é consumida, para o
+   próximo voltar sair do site normalmente.
+   ============================================================ */
+(function navBack() {
+  const ADMIN = 'viewAdmin';
+  let tracked = null;   // tela que a entrada de histórico representa
+  let suppress = false; // a entrada esta sendo consumida por nos
+
+  function telaAtual() {
+    if (document.getElementById(ADMIN)?.classList.contains('active')) return ADMIN;
+    const abertos = document.querySelectorAll('.overlay.open');
+    return abertos.length ? abertos[abertos.length - 1].id : null;
+  }
+
+  function sync() {
+    const tela = telaAtual();
+
+    if (!tela) {
+      // tudo fechou por fora do botao de voltar: devolve a entrada
+      if (tracked) { tracked = null; suppress = true; history.back(); }
+      return;
+    }
+    if (tela === tracked) return;   // mesma tela, nada a fazer
+
+    if (tracked) history.replaceState({ nav: tela }, ''); // trocou de sheet: reaproveita
+    else history.pushState({ nav: tela }, '');            // primeira tela: cria a entrada
+    tracked = tela;
+  }
+
+  function fecharTela(tela) {
+    if (tela === ADMIN) closeAdminPanel();
+    else { closeAll(); stopTracking(); }
+  }
+
+  window.addEventListener('popstate', () => {
+    if (suppress) { suppress = false; return; } // fechamos nós mesmos
+    const tela = tracked;                      // guarda ANTES de limpar
+    if (!tela) return;                          // sem tela aberta: deixa o navegador sair
+    tracked = null;
+    fecharTela(tela);
+  });
+
+  function start() {
+    const mo = new MutationObserver(sync);
+    document.querySelectorAll('.overlay').forEach(o =>
+      mo.observe(o, { attributes: true, attributeFilter: ['class'] }));
+    const admin = document.getElementById(ADMIN);
+    if (admin) mo.observe(admin, { attributes: true, attributeFilter: ['class'] });
+    sync();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();

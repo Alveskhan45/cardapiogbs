@@ -313,12 +313,14 @@ function renderItem(p, q = '') {
         ${flag}
         <div class="item-name">${highlight(p.name, q)}${out ? ' <span style="color:#6b7280;font-size:.75rem">(esgotado)</span>' : ''}</div>
         <div class="item-desc">${highlight(p.desc || '', q)}</div>
-        <div class="item-price">
-          ${p.promo && p.promoPrice ? `<span class="old">${brl(p.price + minDelta)}</span>` : `<span style="font-size:.8rem">${hasVar ? 'a partir de ' : 'por '}</span>`}
-          <span class="value">${brl(displayPrice)}</span>
+        <div class="item-foot">
+          <div class="item-price">
+            ${p.promo && p.promoPrice ? `<span class="old">${brl(p.price + minDelta)}</span>` : `<span style="font-size:.8rem">${hasVar ? 'a partir de ' : 'por '}</span>`}
+            <span class="value">${brl(displayPrice)}</span>
+          </div>
+          ${quickBtn}
         </div>
       </div>
-      ${quickBtn}
     </div>`;
 }
 

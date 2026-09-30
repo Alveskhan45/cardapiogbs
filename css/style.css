@@ -105,8 +105,8 @@ h1,h2,h3,h4,h5,.hero h1,.item-name,.cat-toggle,.sb-brand strong,.kpi strong,
 .cat-toggle.locked{cursor:default}
 .cat-toggle.locked:hover{transform:none;box-shadow:0 1px 3px rgba(0,0,0,.05)}
 
-.cat-submenu{max-height:0;overflow:hidden;background:#fff;border-radius:0 0 14px 14px;border:1px solid transparent;border-top:none;transition:max-height .4s cubic-bezier(.25,.46,.45,.94),opacity .3s ease,border-color .2s ease,box-shadow .2s ease,padding .3s ease,margin-top .3s ease;margin-top:-8px;padding:0 8px;opacity:0}
-.cat-submenu.open{max-height:5000px;opacity:1;padding:12px 8px 16px;border-color:var(--border);box-shadow:0 8px 24px rgba(0,0,0,.08);margin-top:0}
+.cat-submenu{max-height:0;overflow:hidden;background:#fff;border-radius:0 0 14px 14px;border:1px solid transparent;border-top:none;transition:max-height .4s cubic-bezier(.25,.46,.45,.94),opacity .3s ease,border-color .2s ease,box-shadow .2s ease,padding .3s ease,margin-top .3s ease;margin-top:-8px;padding:0 6px;opacity:0}
+.cat-submenu.open{max-height:5000px;opacity:1;padding:10px 6px 12px;border-color:var(--border);box-shadow:0 8px 24px rgba(0,0,0,.08);margin-top:0}
 .cat-submenu .item{margin:0 0 6px;border-radius:12px}
 .cat-submenu .empty{padding:24px 10px;font-size:.9rem}
 
@@ -877,24 +877,30 @@ footer .powered{margin-top:20px;font-size:.75rem;color:#666}
    ESTILO STARFOOD — coluna estreita + fontes condensadas
    (itens mais longos que quadrados, sem quebra de texto)
    ============================================================ */
-main{max-width:600px;padding:16px}
-.item{padding:10px 12px;border-radius:10px;gap:12px;margin-bottom:8px}
-.item-thumb{width:64px;height:64px;border-radius:10px;font-size:2rem}
+/* ============================================================
+   DENSIDADE: menos espaço lateral e fontes menores para o nome e
+   a descrição caberem em menos linhas. Só encolhe o CONTENTOR e a
+   TIPOGRAFIA — os alvos de toque (botões, min-height) ficam intactos.
+   ============================================================ */
+main{max-width:600px;padding:14px 12px}
+.item{padding:9px 10px;border-radius:10px;gap:10px;margin-bottom:8px}
+.item-thumb{width:58px;height:58px;border-radius:10px;font-size:1.8rem}
 .item-body{gap:1px}
-.item-name{font-family:'Oswald','Inter',sans-serif;font-size:1.05rem;font-weight:600;color:var(--primary);letter-spacing:.2px;line-height:1.2;margin-bottom:2px}
-.item-desc{font-family:'Cuprum','Inter',sans-serif;font-size:.9rem;line-height:1.32;margin-bottom:2px}
+.item-name{font-family:'Oswald','Inter',sans-serif;font-size:1rem;font-weight:600;color:var(--primary);letter-spacing:.2px;line-height:1.2;margin-bottom:2px}
+.item-desc{font-family:'Cuprum','Inter',sans-serif;font-size:.85rem;line-height:1.3;margin-bottom:2px}
 .item-price{font-family:'Cuprum',sans-serif}
-.item-price .value{font-family:'Yanone Kaffeesatz','Oswald',sans-serif;font-size:1.35rem;line-height:1;color:var(--primary)}
+.item-price .value{font-family:'Yanone Kaffeesatz','Oswald',sans-serif;font-size:1.25rem;line-height:1;color:var(--primary)}
 .item-price .old{font-size:.78rem}
 .cat-toggle{font-family:'Oswald','Inter',sans-serif;padding:8px 14px;border-radius:10px;letter-spacing:.3px}
 .cat-toggle .cat-emoji{font-size:1.05rem}
 .cat-toggle .cat-count{font-size:.72rem;padding:2px 8px}
-.cat-menu{padding:0 16px}
+.cat-menu{padding:0 10px}
 .sheet h2,.sheet .close-row h2{font-family:'Oswald',sans-serif;letter-spacing:.2px}
 .sheet .subtitle{font-family:'Cuprum',sans-serif;font-size:.92rem;line-height:1.4}
 @media (max-width:480px){
-  .item-thumb{width:56px;height:56px;font-size:1.7rem}
-  main{padding:12px}
+  .item-thumb{width:50px;height:50px;font-size:1.5rem}
+  main{padding:10px 8px}
+  .cat-menu{padding:0 6px}
 }
 
 /* ============================================================
@@ -1090,7 +1096,7 @@ body:has(.admin-view.active) footer{
 
   .cat-toggle{
     min-height:52px;
-    padding:14px 16px;
+    padding:12px;
   }
 
   .sb-item{
@@ -1127,8 +1133,10 @@ body:has(.admin-view.active) footer{
     padding-bottom:7px;
   }
 
+  /* o card inteiro e o alvo de toque, entao nao precisa de padding grande:
+     antes isto SUBIA para 14px e comia a largura do texto */
   .cat-submenu .item{
-    padding:14px;
+    padding:9px 10px;
   }
 
   .view-switch-btn,

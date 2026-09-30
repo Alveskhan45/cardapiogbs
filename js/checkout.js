@@ -16,7 +16,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!state.cart.length) { toast('Carrinho vazio'); return; }
     const { subAfterDiscount } = calcTotals({});
     if (state.config.minOrder > 0 && subAfterDiscount < state.config.minOrder) {
-      toast(`Pedido mínimo ${brl(state.config.minOrder)}`);
+      /* O mínimo é sobre os PRODUTOS (a entrega não conta), então o cliente
+         vê R$ 17,00 no total e não entende o bloqueio. Diz quanto falta. */
+      const falta = state.config.minOrder - subAfterDiscount;
+      toast(`Faltam ${brl(falta)} em produtos (mínimo ${brl(state.config.minOrder)})`);
       return;
     }
     closeAll();

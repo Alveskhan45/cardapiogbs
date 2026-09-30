@@ -135,7 +135,7 @@ function renderCartExtra(sub) {
   const falta = min - sub;
   el.innerHTML = `<div class="co-note">
     ${min > 0 ? (falta > 0
-      ? `<div class="co-warn">⚠️ Faltam <b>${brl(falta)}</b> para o pedido mínimo de ${brl(min)}</div>`
+      ? `<div class="co-warn">⚠️ Faltam <b>${brl(falta)}</b> em produtos para o pedido mínimo de ${brl(min)}</div>`
       : `<div class="co-ok">✅ Pedido mínimo atingido (${brl(min)})</div>`) : ''}
     <div>🕒 Entrega estimada: <b>${esc(c.deliveryTime || '—')}</b></div>
     <div>🛵 Frete: <b>${appliedCoupon && appliedCoupon.type === 'frete' ? 'Grátis 🎉' : freightHint()}</b> <span style="opacity:.8">(estimado — confirmado no próximo passo)</span></div>

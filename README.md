@@ -1,62 +1,71 @@
-# 🥤 Cardápio Digital
+# 🛒 Cardápio Digital
 
-Cardápio digital de bebidas com carrinho, cupons, PIX, +18, controle de estoque e painel administrativo.
+Cardápio digital para distribuidora de bebidas, com carrinho, cupons, PIX, restrição +18, controle de estoque e painel administrativo.
 
-- **Front (cardápio):** pasta `public/` (HTML+CSS+JS puros, sem build)
-- **Backend (opcional/remoto):** `server.js` (Node/Express) + `data/db.json`
+**Site no ar:** https://alveskhan45.github.io/cardapiogbs/
 
----
+## O que tem dentro
 
-## 🚀 GitHub Pages (grátis — só o cardápio)
+| Área | Onde | Detalhe |
+| --- | --- | --- |
+| Cardápio (front) | `index.html`, `css/`, `js/`, `assets/` | HTML + CSS + JS puros, sem build |
+| Backend (opcional) | `server.js` | Node.js + Express, API REST e eventos em tempo real (SSE) |
+| Dados | `data/db.json` | Criado na primeira execução, fora do git |
 
-Modo **estático/offline**: o cardápio, carrinho, cupons, QR PIX, favoritos e pedidos via **WhatsApp** funcionam normalmente. Sem acompanhamento de pedido nem sincronização com o painel entre aparelhos — por isso o painel admin em cada navegador salva localmente (a senha \u00e9 definida por voc\u00ea no painel > Seguran\u00e7a).
+## GitHub Pages (grátis — só o cardápio)
 
-### Como publicar
+No modo estático o cardápio, o carrinho, os cupons, o QR PIX, os favoritos e o envio do pedido pelo **WhatsApp** funcionam normalmente. Não há acompanhamento de pedido nem sincronização do painel entre aparelhos — por isso, nesse modo o painel admin salva os dados localmente no navegador (a senha é definida por você em **⚙️ Configurações → Segurança**).
 
-1. Crie um repositório `sua-conta.github.io` (ou um repo normal).
+O front já está na **raiz do repositório**, então o Pages serve direto — não precisa mover arquivo nenhum.
 
-2. Dentro do repositório, copie o conteúdo da pasta `public/` para a raiz:
+1. **Settings → Pages** → *Build and deployment* → *Source*: **Deploy from a branch**, branch `main`, pasta `/ (root)`.
+2. O `.nojekyll` já está na raiz e evita o Jekyll de mexer nos arquivos.
+3. O site fica em `https://<sua-conta>.github.io/<nome-do-repo>/`.
 
-   ```
-   public/
-     index.html
-     css/
-     js/
-     manifest.json
-     sw.js
-     .nojekyll  (já incluído — evita problemas com Jekyll)
-   ```
-
-3. **GitHub → Settings → Pages** → em *Build and deployment*, escolha:
-   - **Source: Deploy from a branch** → branch `main`, pasta `/ (root)`.
-   - (Ou **GitHub Actions** — não é necessário para este projeto).
-
-4. Seu site fica em `https://sua-conta.github.io/nome-do-repo/` (ou `https://sua-conta.github.io/` se for repo de usuário).
-
-### Subindo pelo terminal
+## Rodar no PC (completo, com painel sincronizado)
 
 ```bash
-cd public
-git init
-git add .
-git commit -m "Cardápio digital - GitHub Pages"
-git branch -M main
-git remote add origin https://github.com/SUA-CONTA/SEU-REPO.git
-git push -u origin main
+npm install
+npm start
 ```
 
-> 📌 **Nunca** suba a pasta `data/` (contém pedidos reais e hash de senha) — o `.gitignore` na raiz do projeto já bloqueia.
-
----
-
-## 🖥️ Usar no PC (completo, incluindo painel)
+Abre em `http://localhost:3001` (ou em `$PORT`, se você definir). Na primeira execução o servidor imprime no terminal uma **senha inicial aleatória** — ela aparece só naquela vez, anote. Depois disso a senha existe apenas como hash em `data/db.json` e você troca pelo painel, em **🔐 Segurança**.
 
 ```bash
-node server.js
+PORT=8080 npm start   # roda em outra porta
 ```
 
-Abre em `http://localhost:3000`. O servidor imprime no terminal uma **senha inicial aleatória** na primeira execução (ela só aparece nessa vez — anote). Depois disso a senha só existe como hash em `data/db.json` e só muda pelo painel, em **⚙️ → Segurança**.
+## Publicar com o backend
 
-## ☁️ Publicar com o backend completo (futuro)
+Para persistir pedidos, acompanhar status e sincronizar o painel entre aparelhos, hospede o projeto inteiro num host Node — por exemplo Render, Railway ou uma VPS. O `server.js` já lê a porta do ambiente (`process.env.PORT`).
 
-Para pedidos persistentes, acompanhamento e painel sincronizado, é preciso hospedar o **projeto inteiro** (não só `public/`) num host Node — ex.: Render (free tier), Railway ou uma VPS, ou expor seu PC com Cloudflare Tunnel. Instruções detalhadas podem ser adicionadas depois.
+> ⚠️ **Nunca** versione a pasta `data/` (ela tem pedidos de clientes e o hash da senha). O `.gitignore` da raiz já bloqueia, assim como `.env` e `node_modules/`.
+
+## Estrutura
+
+```
+.
+├── index.html          # cardápio + painel (uma página)
+├── 404.html
+├── manifest.json
+├── .nojekyll
+├── css/style.css
+├── js/
+│   ├── state.js        # estado + persistência
+│   ├── menu.js         # render do cardápio
+│   ├── cart.js         # carrinho
+│   ├── checkout.js     # dados do pedido, frete, CEP
+│   ├── app.js          # bootstrap do front
+│   ├── admin.js        # painel (produtos, pedidos, clientes…)
+│   ├── admin-login.js  # tela de senha
+│   ├── admin-*.js      # dashboard, pedidos, entregas, log
+│   ├── backup.js       # exportar / restaurar ZIP
+│   └── vendor/         # qrcode.min.js
+├── assets/produtos/
+├── server.js           # API REST + SSE
+└── package.json
+```
+
+## Requisitos
+
+Node.js 18 ou superior (só a dependência é `express`).

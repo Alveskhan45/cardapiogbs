@@ -1,6 +1,6 @@
 /* ============================================================
    Cardápio Digital — Backend Node.js + Express
-   Serve o front (public/) + API REST + eventos em tempo real (SSE)
+   Serve o front (raiz do repo) + API REST + eventos em tempo real (SSE)
    Persistência local em arquivo JSON (data/db.json)
    ============================================================ */
 const express = require('express');
@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = 3001;
+const PORT = Number(process.env.PORT) || 3001;
 
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
@@ -265,7 +265,22 @@ app.use((req, res, next) => {
   res.setHeader('Expires', '0');
   next();
 });
-app.use(express.static(path.join(__dirname, 'public')));
+/* O front vive na raiz do repo (o GitHub Pages serve de la).
+   Monta apenas os caminhos publicos para nao expor server.js,
+   package.json, data/ nem o .git deste diretorio. */
+const PUBLIC_FILES = new Set(['index.html', 'manifest.json', '404.html']);
+const PUBLIC_DIRS = new Set(['css', 'js', 'assets']);
+function isPublicPath(p) {
+  const rel = String(p || '').replace(/^\/+/, '');
+  if (!rel) return PUBLIC_FILES.has('index.html');
+  return PUBLIC_FILES.has(rel) || PUBLIC_DIRS.has(rel.split('/')[0]);
+}
+const serveStatic = express.static(__dirname, { index: false, fallthrough: true });
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.use((req, res, next) => {
+  if (!isPublicPath(req.path)) return next();
+  serveStatic(req, res, next);
+});
 
 /* ------------------- Eventos em tempo real (SSE) ------------------- */
 const sseClients = new Set();
@@ -559,7 +574,7 @@ app.get('/api/track/:code', (req, res) => {
 });
 
 app.get('/acompanhar', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.post('/api/login', (req, res) => {

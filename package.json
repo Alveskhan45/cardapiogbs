@@ -1,0 +1,34 @@
+{
+  "name": "cardapio-digital",
+  "version": "1.0.0",
+  "description": "Cardápio digital para distribuidora de bebidas com backend Node.js + Express",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "health": "node -e \"const http=require('http'); const url='http://localhost:3001/api/health'; http.get(url, (res) => { let data=''; res.on('data', (chunk) => data += chunk); res.on('end', () => { try { const body = JSON.parse(data || '{}'); console.log(JSON.stringify({ status: res.statusCode, body }, null, 2)); process.exit(res.statusCode === 200 && body.ok ? 0 : 1); } catch (err) { console.error(err); process.exit(1); } }); }).on('error', (err) => { console.error(err); process.exit(1); });\"",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "migrate": "node scripts/migrate.js",
+    "migrate:legacy": "node scripts/migrate-legacy.js",
+    "db:backup": "node scripts/backup-db.js",
+    "prod:check": "node scripts/check-production.js",
+    "test": "node scripts/test-isolation.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "compression": "^1.8.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0",
+    "ioredis": "^6.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.4.0",
+    "pg": "^8.23.1",
+    "uuid": "^14.0.2"
+  }
+}

@@ -1,0 +1,76 @@
+# Análise do Sistema de Acompanhamento de Pedidos
+
+## Versão Atual (v6 - JavaScript em `js/app.js`)
+
+### 1. Rastreamento por Código (trackCode)
+- **Não usa senha** para identificar pedidos
+- Cada pedido recebe um `trackCode` único (ex: "K7T2M")
+- O código é gerado no checkout: `const trackCode = 'L' + Math.random().toString(36).slice(2,7).toUpperCase();`
+- O cliente recebe esse código na confirmação do pedido
+
+### 2. Caminho de Preparação até a Entrega
+**SIM, o sistema tem o caminho gravado via `statusHistory`.**
+
+O objeto do pedido tem um array `statusHistory` que registra cada etapa com timestamp:
+
+```javascript
+// Exemplo de statusHistory no pedido:
+statusHistory: [
+  { status: 'pendente', at: '2026-10-14T10:00:00.000Z' },
+  { status: 'preparando', at: '2026-10-14T10:30:00.000Z' },
+  { status: 'entregando', at: '2026-10-14T11:00:00.000Z' },
+  { status: 'entregue', at: '2026-10-14T12:00:00.000Z' }
+]
+```
+
+A função `trackTimes()` extrai esses tempos:
+```javascript
+function trackTimes(o) {
+  const map = {};
+  (Array.isArray(o.statusHistory) ? o.statusHistory : []).forEach(e => {
+    if (e && e.status && e.at) map[e.status] = e.at;
+  });
+  // ...
+  return map;
+}
+```
+
+E o frontend mostra o caminho completo com horas:
+- "Pedido recebido" (pendente)
+- "Em preparo" (preparando)  
+- "Saiu para entrega" (entregando)
+- "Entregue" (entregue)
+
+### 3. Fluxo de Status
+```
+pendente → preparando → entregando → entregue
+           ↓
+cancelado
+```
+
+### 3. O que NÃO mudou da "versão anterior"
+- **Senha NÃO é gravada** no sistema de rastreamento
+- O sistema identifica pedidos pelo `trackCode`, não por senha
+- O histórico de status já existe na versão atual
+
+## Resumo da Diferença
+
+| Característica | Versão Anterior | Versão Atual |
+|---------------|----------------|--------------|
+| **Identificação do pedido** | Senha gravada | Código `trackCode` |
+| **Caminho de preparação** | Provavelmente tinha | **TEM** via `statusHistory` |
+| **Etapas mostradas** | ? | pendente → preparando → entregando → entregue |
+| **Horas de cada etapa** | ? | **TEM** via `statusHistory` timestamps |
+
+## Conclusão
+
+O sistema **ATUAL tem o "caminho de preparação até a entrega"** gravado no `statusHistory` de cada pedido, com timestamps de quando cada etapa foi atingida. O que **não tem** é a senha gravada — o sistema usa códigos de rastreamento (`trackCode`) em vez de senhas para identificar os pedidos.
+
+Se o cliente esperava ver a senha no acompanhamento, isso mudou propositalmente para usar códigos de rastreamento mais seguros. Mas o histórico de etapas (quando ficou em preparo, quando saiu para entrega, quando foi entregue) continua disponível no sistema.
+
+Para ver esse caminho na prática, o cliente pode:
+1. Fazer o pedido → receber o `trackCode`
+2. Ir em "Acompanhar Pedido" no cardápio
+3. Digitar o código → ver as etapas com horas de cada uma
+
+O código já está rodando no servidor na porta 3001.

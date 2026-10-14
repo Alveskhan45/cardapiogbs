@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel da Plataforma — Cardápio Digital SaaS</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --primary:#7c3aed;--primary-dark:#6d28d9;--accent:#a78bfa;
+  --bg:#f8fafc;--card:#fff;--text:#111827;--muted:#64748b;
+  --border:#e2e8f0;--line:#f1f5f9;--hover:#f1f5f9;--subtle:#f8fafc;
+  --success:#059669;--danger:#dc2626;--info:#2563eb;--warning:#d97706;
+  --shadow-sm:0 1px 2px rgba(16,24,40,.05);
+  /* altura única da faixa de topo: faz a borda inferior da marca (.sb-brand)
+     e a da barra de topo (.admin-top) terminarem exatamente na mesma linha */
+  --topbar-h:72px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 'Geist','Inter',system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:var(--primary)}
+h1,h2,h3,h4,.sb-brand strong{font-family:'Geist','Inter','Segoe UI',system-ui,sans-serif}
+.icon-svg{width:18px;height:18px;display:inline-block;vertical-align:middle;flex-shrink:0}
+.icon-text{display:inline-flex;align-items:center;gap:8px}
+.hidden{display:none !important}
+
+/* ---------------- botões ---------------- */
+button{font:inherit;border:1px solid var(--border);background:#fff;color:var(--text);border-radius:10px;padding:9px 14px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:background .15s,border-color .15s,box-shadow .15s}
+button:hover{background:var(--hover)}
+button.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+button.primary:hover{filter:brightness(1.06)}
+button.green,button.success{background:var(--success);border-color:var(--success);color:#fff}
+button.red,button.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+button.ghost{background:#fff}
+button:disabled{opacity:.5;cursor:not-allowed}
+button.pulse{animation:pulse 1.4s infinite;background:#fff7e6;border-color:var(--warning);color:#b45309}
+@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(217,119,6,.15)}}
+a.ghost{display:inline-flex;align-items:center;gap:6px;text-decoration:none;padding:9px 14px;border:1px solid var(--border);border-radius:10px;color:var(--text);font-weight:600;background:#fff}
+a.ghost:hover{background:var(--hover)}
+
+/* ---------------- layout ---------------- */
+.admin-view{display:flex;width:100%;height:100vh;overflow:hidden}
+.admin-sidebar{width:256px;background:#fff;border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;height:100vh;overflow-y:auto}
+.sb-brand{height:var(--topbar-h);padding:0 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.sb-logo{width:36px;height:36px;background:var(--primary);color:#fff;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.sb-brand strong{display:block;font-size:1rem;font-weight:800;color:var(--text);letter-spacing:-.01em;line-height:1.2}
+.sb-brand small{display:block;font-size:.62rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.sb-nav{flex:1;padding:12px;display:flex;flex-direction:column;gap:3px}
+.sb-item{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:12px;color:var(--muted);background:none;border:none;cursor:pointer;text-align:left;font-size:.875rem;font-weight:500;font-family:inherit;position:relative;justify-content:flex-start}
+.sb-item:hover{background:var(--hover);color:var(--text)}
+.sb-item.active{background:var(--primary);color:#fff;font-weight:600;box-shadow:0 1px 2px rgba(16,24,40,.12)}
+.sb-item.active:hover{background:var(--primary);color:#fff}
+.sb-ico{width:18px;display:inline-flex;justify-content:center;flex-shrink:0}
+.sb-badge{margin-left:auto;background:var(--hover);color:var(--muted);font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:999px}
+.sb-item.active .sb-badge{background:rgba(255,255,255,.22);color:#fff}
+.sb-badge-alert{background:var(--danger);color:#fff;animation:pulseBadge 2s infinite}
+.sb-item.active .sb-badge-alert{background:#fff;color:var(--danger)}
+@keyframes pulseBadge{0%,100%{opacity:1}50%{opacity:.55}}
+
+.admin-main{flex:1;min-width:0;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.admin-top{background:#fff;height:var(--topbar-h);padding:0;display:flex;align-items:center;border-bottom:1px solid var(--border);z-index:20;flex-shrink:0}
+/* wrapper interno: mesma largura máxima do .admin-body para as barras
+   ficarem alinhadas com os resultados */
+.admin-top-inner{width:100%;max-width:1400px;height:100%;margin:0 auto;padding:0 24px;display:flex;align-items:center;gap:14px}
+.admin-top h2{font-size:1.15rem;flex:1;font-weight:700;margin:0}
+.admin-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.admin-toggle{display:none}
+.badge-sa{font-size:10px;font-weight:800;text-transform:uppercase;background:#f5f3ff;color:var(--primary);border:1px solid #ddd6fe;border-radius:999px;padding:3px 10px;white-space:nowrap}
+.admin-body{flex:1;overflow-y:auto;padding:24px;background:var(--bg);max-width:1400px;width:100%;margin:0 auto}
+#payBanner{display:none;background:#fffbeb;border-bottom:1px solid #fcd34d;color:#92400e;padding:0;font-size:12px;font-weight:700}
+#payBanner.show{display:block}
+#payBanner .banner-inner{width:100%;max-width:1400px;margin:0 auto;padding:10px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+#payBanner .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:8px;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.2}}
+
+@media(max-width:900px){
+  .admin-sidebar{position:fixed;left:0;top:0;bottom:0;z-index:70;transform:translateX(-100%);transition:transform .2s ease;box-shadow:0 20px 40px rgba(16,24,40,.18)}
+  .admin-sidebar.open{transform:translateX(0)}
+  .admin-toggle{display:inline-flex}
+  .admin-body{padding:14px}
+  .admin-top-inner{padding:0 14px}
+  #payBanner .banner-inner{padding:10px 14px}
+}
+
+/* ---------------- cards / kpis ---------------- */
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:18px;box-shadow:var(--shadow-sm)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm)}
+.kpi small{display:block;color:var(--muted);font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.kpi strong{display:block;font-size:1.5rem;font-weight:800;color:var(--text);line-height:1.2}
+.kpi .sub2{color:var(--muted);font-size:.75rem}
+.kpi.alert{border-color:#fecaca;background:#fff5f5}
+@media(max-width:700px){.kpis{grid-template-columns:1fr 1fr}}
+
+/* ---------------- form / inputs ---------------- */
+input,select,button,textarea{font:inherit}
+input[type=text],input[type=email],input[type=password],input[type=search],input[type=number],input[type=tel],select,textarea,input[type=color]{background:#fff;border:1px solid var(--border);color:var(--text);border-radius:9px;padding:9px 11px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(124,58,237,.12)}
+textarea{width:100%;min-height:130px;font-family:ui-monospace,Consolas,monospace;font-size:13px;resize:vertical}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.note{color:var(--muted);font-size:12px;margin-top:8px}
+.err{color:var(--danger);font-size:13px;margin-top:10px;min-height:18px}
+.empty{padding:26px;text-align:center;color:var(--muted)}
+
+/* ---------------- tabela ---------------- */
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:11px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+th{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em}
+td.mono,.mono{font-family:ui-monospace,Consolas,monospace;font-size:13px}
+.pill{display:inline-block;font-size:11px;padding:3px 10px;border-radius:999px;border:1px solid var(--border);background:#fff}
+.pill.active{color:var(--success);border-color:#a7f3d0;background:#ecfdf5}
+.pill.trial{color:var(--info);border-color:#bfdbfe;background:#eff6ff}
+.pill.suspended{color:var(--warning);border-color:#fcd34d;background:#fffbeb}
+.pill.cancelled{color:var(--danger);border-color:#fecaca;background:#fef2f2}
+.pill.free,.pill.starter{color:#64748b}
+.pill.pro{color:var(--info)}.pill.business{color:#c4b5fd}.pill.enterprise{color:var(--primary)}
+.store-id{display:flex;gap:10px;align-items:center}
+.avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;flex-shrink:0}
+.acts{display:flex;gap:6px;flex-wrap:wrap}
+.acts button{padding:5px 10px;font-size:12px;border-radius:8px}
+
+/* ---------------- específicos ---------------- */
+.paycard{border:1px solid #fcd34d;border-radius:14px;padding:16px;margin-bottom:12px;background:#fffbeb}
+.plan-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.plan{background:var(--subtle);border:1px solid var(--border);border-radius:14px;padding:16px}
+.plan label{display:block;font-size:11px;color:var(--muted);margin:10px 0 4px}
+.plan input,.plan select{width:100%}
+.feats{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;margin-top:8px}
+.feats label{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text);margin:0}
+.preview{background:#0b1220;color:#34d399;border:1px solid #1e293b;border-radius:10px;padding:14px;font-family:ui-monospace,Consolas,monospace;font-size:13px;white-space:pre-wrap;margin-top:10px}
+.tagbar{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.tagbar button{font-size:11px;padding:4px 8px}
+.warnbox{background:#fffbeb;border:1px solid var(--warning);border-radius:10px;padding:12px;font-size:13px;margin-top:12px}
+.secret{background:var(--subtle);border:1px dashed var(--border);border-radius:10px;padding:14px;font-family:ui-monospace,Consolas,monospace;word-break:break-all;margin:12px 0;color:var(--primary)}
+.planpick{display:grid;gap:8px;margin:12px 0}
+.planpick button{text-align:left;padding:12px;justify-content:flex-start}
+.planpick button.sel{border-color:var(--primary);background:#f5f3ff}
+
+/* ---------------- login ---------------- */
+#login{max-width:400px;margin:12vh auto;padding:0 16px}
+#login .card{padding:24px}
+#login h2{text-align:center;margin:0 0 6px}
+#login p.sub{text-align:center;color:var(--muted);margin:0 0 22px;font-size:13px}
+#login label{display:block;font-size:12px;color:var(--muted);margin:14px 0 6px}
+#login input{width:100%}
+#login button{width:100%;margin-top:20px;padding:11px}
+
+/* ---------------- modais ---------------- */
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;padding:20px;z-index:80}
+.modal .sheet{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;box-shadow:0 20px 50px rgba(16,24,40,.2)}
+.modal h3{margin:0 0 4px}
+.modal label{display:block;font-size:12px;color:var(--muted);margin:12px 0 6px}
+.modal input,.modal select{width:100%}
+.modal .foot{display:flex;gap:10px;justify-content:flex-end;margin-top:22px;flex-wrap:wrap}
+
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;border-radius:999px;padding:11px 20px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:90;max-width:90vw;box-shadow:0 10px 30px rgba(16,24,40,.3)}
+.toast.on{opacity:1}
+
+/* ---------------- configurações / aparência ---------------- */
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:10px 0 6px}
+.swatches{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.swatch{width:34px;height:34px;margin:0;border-radius:50%;padding:0;background:var(--c,#ccc);border:2px solid transparent;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);cursor:pointer}
+.swatch:hover{background:var(--c,#ccc)}
+.swatch.active{border-color:var(--text);box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--c,#ccc)}
+.swatch.custom{position:relative;overflow:hidden;background:conic-gradient(from 90deg,#f87171,#facc15,#4ade80,#38bdf8,#a78bfa,#f87171)}
+.swatch.custom input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0;margin:0}
+.segment{display:inline-flex;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.segment button{border:none;border-radius:0;background:var(--card);padding:8px 20px}
+.segment button.active{background:var(--primary);color:#fff}
+.segment button.active:hover{background:var(--primary)}
+
+:root[data-theme="dark"]{
+  --bg:#0b1220;--card:#111c30;--text:#e5ecf6;--muted:#93a4bd;
+  --border:#243249;--line:#16233a;--hover:#1b2942;--subtle:#0e1830;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+}
+:root[data-theme="dark"] .admin-sidebar,
+:root[data-theme="dark"] .admin-top,
+:root[data-theme="dark"] button:not(.swatch),
+:root[data-theme="dark"] a.ghost{background:var(--card)}
+:root[data-theme="dark"] .swatch{background:var(--c,#ccc);box-shadow:inset 0 0 0 1px rgba(255,255,255,.28)}
+:root[data-theme="dark"] .swatch.custom{background:conic-gradient(from 90deg,#f87171,#facc15,#4ade80,#38bdf8,#a78bfa,#f87171)}
+:root[data-theme="dark"] .segment button.active{background:var(--primary);color:#fff}
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] textarea{background:var(--bg);color:var(--text)}
+:root[data-theme="dark"] .badge-sa{background:#1c2a4a;border-color:#2c3f66;color:var(--accent)}
+:root[data-theme="dark"] .paycard{background:#2a2410;border-color:#5c4a12;}
+
+/* ---------------- notificações (switch + alerta) ---------------- */
+.switch{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--text);margin:12px 0}
+.switch input{width:auto;margin:0;flex-shrink:0}
+.sa-alert{position:fixed;right:20px;bottom:20px;z-index:260;max-width:min(420px,92vw);background:var(--card);border:1px solid var(--border);border-left:4px solid var(--primary);border-radius:12px;box-shadow:0 12px 34px rgba(16,24,40,.28);padding:14px 16px;display:flex;flex-direction:column;gap:12px;animation:saAlertaIn .25s ease}
+@keyframes saAlertaIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.sa-alert-body{display:flex;flex-direction:column;gap:3px}
+.sa-alert-body strong{font-size:.92rem}
+.sa-alert-body span{font-size:.82rem;color:var(--muted)}
+.sa-alert-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.sa-alert-actions button{padding:7px 12px;font-size:.82rem}
+</style>
+<style>
+.danger-text{color:#dc2626 !important;border-color:#fca5a5 !important}
+:root[data-theme="dark"] .danger-text{color:#f87171 !important;border-color:#7f1d1d !important}
+</style>
+</head>
+<body>
+
+<section id="login">
+  <form class="card" id="loginForm" autocomplete="on">
+    <h2>Super Admin • Plataforma SaaS</h2>
+    <p class="sub">Acesso exclusivo do gestor geral da plataforma</p>
+    <label for="saEmail">E-mail do Gestor do SaaS</label>
+    <input type="email" id="saEmail" name="email" autocomplete="username" placeholder="superadmin@cardapiodigital.com">
+    <label for="saPass">Chave Master de Acesso</label>
+    <input type="password" id="saPass" name="password" autocomplete="current-password" placeholder="••••••••••••">
+    <button class="primary" id="saLoginBtn" type="submit">Entrar no Painel Super Admin</button>
+    <div class="err" id="saLoginErr"></div>
+    <p class="note" style="text-align:center;margin-top:16px"><a href="/">&larr; Voltar ao cardápio</a></p>
+  </form>
+</section>
+
+<div class="admin-view hidden" id="dash">
+  <aside class="admin-sidebar" id="admin-sidebar">
+    <div class="sb-brand">
+      <span class="sb-logo" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M13 2 4.5 13h5.4L8 22l9-12h-5.3L18 2h-5Z" fill="currentColor"/></svg></span>
+      <span><strong>CardapioDigital</strong><small>SaaS • Plataforma</small></span>
+    </div>
+    <nav class="sb-nav" id="tabs">
+      <button class="sb-item active" data-tab="tenants">
+        <span class="sb-ico"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9.5l8-4.5 8 4.5V19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 19v-6h6v6M7 9.5h10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+        <span>Lojas Clientes</span><span class="sb-badge" id="cTenants">0</span>
+      </button>
+      <button class="sb-item" data-tab="notifications">
+        <span class="sb-ico"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5a5.5 5.5 0 0 1 5.5 5.5v3.5l1.8 3.2H4.7l1.8-3.2V10A5.5 5.5 0 0 1 12 4.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10 18.5a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+        <span>Notificações (<span id="cPays">0</span>)</span><span class="sb-badge sb-badge-alert hidden" id="bPays">0</span>
+      </button>
+      <button class="sb-item" data-tab="plans">
+        <span class="sb-ico"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7.5h14M5 12h14M5 16.5h14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8 4.5v15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+        <span>Planos &amp; Precificação</span>
+      </button>
+      <button class="sb-item" data-tab="messages">
+        <span class="sb-ico"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12.3A8.3 8.3 0 0 1 4.5 16L3 20l4.1-1.1A8.2 8.2 0 1 1 20 12.3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 9.2c.2-.6.6-.8 1-.8.3 0 .6.1.8.4l.4.6c.2.3.2.7 0 1l-.5.8c-.2.3-.2.7.1 1l.6.8c.3.4.8.5 1.2.3l.8-.4c.3-.1.7-.1 1 .1l.7.5c.3.2.4.6.4 1 0 .4-.1.7-.4 1-.9 1.3-2.4 1.9-4 1.6-1.5-.3-2.8-1.4-3.6-2.8-.7-1.2-1-2.8-.4-4.1Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span>Mensagens &amp; WhatsApp</span>
+      </button>
+      <button class="sb-item" data-tab="billing">
+        <span class="sb-ico"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V7.5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2V19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 11h8M8 15h8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+        <span>Receita &amp; Assinaturas</span>
+      </button>
+      <button class="sb-item" data-tab="audit">
+        <span class="sb-ico"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 19.5 18a1.5 1.5 0 0 1-1.3 2.3H5.8A1.5 1.5 0 0 1 4.5 18L12 3.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 9v4.5M12 17.5h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+        <span>Auditoria Global</span>
+      </button>
+      <button class="sb-item" data-tab="settings">
+        <span class="sb-ico"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M19.4 13a7.9 7.6 0 0 0 0-2l2-1.5-2-3.4-2.4 1a7.9 7.9 0 0 0-1.7-1l-.4-2.6h-3.8l-.4 2.6a7.9 7.9 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.9 7.6 0 0 0 0 1.9l-2 1.6 2 3.4 2.4-1a7.9 7.9 0 0 0 1.7 1l.4 2.6h3.8l.4-2.6a7.9 7.9 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
+        <span>Configurações</span>
+      </button>
+    </nav>
+  </aside>
+
+  <div class="admin-main">
+    <header class="admin-top">
+      <div class="admin-top-inner">
+      <button class="admin-toggle ghost icon-text" id="btnAdminToggle" title="Abrir menu de abas">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span>Menu</span>
+      </button>
+      <h2 id="adminPageTitle">Lojas Clientes</h2>
+      <span class="badge-sa" id="whoami"></span>
+      <div class="admin-actions">
+        <button id="btnPending" title="Pagamentos aguardando" class="ghost icon-text">
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5a5.5 5.5 0 0 1 5.5 5.5v3.5l1.8 3.2H4.7l1.8-3.2V10A5.5 5.5 0 0 1 12 4.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10 18.5a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <span id="pendingCount">0</span>
+        </button>
+        <button class="primary icon-text" id="btnNew"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>Cadastrar Nova Loja</span></button>
+        <button class="ghost" id="saLogout">Sair</button>
+      </div>
+      </div>
+    </header>
+    <div id="payBanner"><div class="banner-inner"><span><span class="dot"></span><span id="payBannerTxt"></span></span><button id="payBannerBtn">Ver pagamentos pendentes</button></div></div>
+    <div class="admin-body">
+
+      <div class="kpis" id="kpis"></div>
+
+      <section data-pane="tenants">
+        <div class="card">
+          <div class="row">
+            <input type="search" id="q" placeholder="Nome, slug ou razão social…">
+            <select id="fStatus">
+              <option value="">Todos os Status</option>
+              <option value="active">Ativas</option>
+              <option value="trial">Em Trial</option>
+              <option value="suspended">Suspensas (Inadimplentes)</option>
+              <option value="cancelled">Canceladas</option>
+            </select>
+            <select id="fPlan">
+              <option value="">Todos os Planos</option>
+              <option value="free">Grátis</option>
+              <option value="starter">Start</option>
+              <option value="pro">Pro</option>
+            </select>
+          </div>
+          <div class="note" id="tenantCount"></div>
+          <div style="overflow-x:auto"><table>
+            <thead><tr><th>Loja &amp; Identidade</th><th>Plano Contratado</th><th>Status Operacional</th><th>Desempenho no Mês</th><th>Ações Operacionais</th></tr></thead>
+            <tbody id="tbody"></tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <section data-pane="notifications" class="hidden">
+        <div class="card">
+          <h3 style="margin:0 0 4px">Assinaturas aguardando pagamento</h3>
+          <p class="note">Contas criadas na página de vendas. Ao liberar o acesso, o plano é ativado por 30 dias e um código de acesso é gerado para enviar ao cliente.</p>
+          <div class="row">
+            <select id="subFilter"><option value="awaiting_payment">Aguardando pagamento</option><option value="payment_reported">Pagamento informado</option><option value="active">Ativas</option><option value="all">Todas</option></select>
+            <button class="ghost" id="subReload">Recarregar</button>
+          </div>
+          <div id="subList"></div>
+        </div>
+        <div class="card">
+          <h3 style="margin:0 0 4px">Contratações pela página de vendas</h3>
+          <p class="note">Contatos que clicaram em "Assinar" ou falar no WhatsApp na landing (/landing).</p>
+          <div class="row">
+            <select id="leadFilter"><option value="new">Novos</option><option value="contacted">Em contato</option><option value="all">Todos</option></select>
+            <button class="ghost" id="leadReload">Recarregar</button>
+          </div>
+          <div id="leadList"></div>
+        </div>
+        <div class="card">
+          <h3 style="margin:0 0 4px">Central de Conferência PIX &amp; Liberação Imediata</h3>
+          <p class="note">Comprovantes informados pelos lojistas ao renovar a assinatura. Aprovar libera a loja + 30 dias na hora.</p>
+          <div class="row">
+            <select id="payFilter"><option value="pending">Pendentes</option><option value="all">Todos</option></select>
+            <button class="ghost" id="payReload">Recarregar</button>
+          </div>
+          <div id="payList"></div>
+        </div>
+      </section>
+
+      <section data-pane="plans" class="hidden">
+        <div class="card">
+          <h3 style="margin:0 0 4px">Gerenciador de Planos, Precificação e Quotas</h3>
+          <p class="note">Altere valores, limites e recursos sem mexer no código. Salvar recalcula o MRR na hora. Limite <b>0 ou -1 = ilimitado</b> (produtos, pedidos, usuários, bairros, storage_mb).</p>
+          <div class="plan-grid" id="planGrid"></div>
+        </div>
+      </section>
+
+      <section data-pane="messages" class="hidden">
+        <div class="card">
+          <h3 style="margin:0 0 4px">Disparador de Mensagens WhatsApp</h3>
+          <p class="note">Modelos com variáveis substituídas automaticamente pelos dados da loja selecionada.</p>
+          <div class="row">
+            <select id="msgTenant" style="flex:1;min-width:200px"></select>
+            <select id="msgModel">
+              <option value="onboarding">Boas-vindas</option>
+              <option value="billingReminder">Lembrete de Cobrança</option>
+              <option value="suspensionNotice">Notificação de Suspensão</option>
+              <option value="reactivationNotice">Confirmação de Reativação</option>
+            </select>
+          </div>
+          <div class="row">
+            <input type="text" id="pixKey" placeholder="Chave PIX (opcional)" style="flex:1">
+            <input type="text" id="pixName" placeholder="Titular da chave (opcional)" style="flex:1">
+          </div>
+          <textarea id="msgText"></textarea>
+          <div class="tagbar" id="tagBar"></div>
+          <div class="preview" id="msgPreview"></div>
+          <div class="row" style="margin-top:12px">
+            <button id="msgCopy">Copiar Mensagem</button>
+            <button class="green" id="msgSend">Enviar no WhatsApp</button>
+            <span style="flex:1"></span>
+            <button class="ghost" id="msgRestore">Restaurar Originais</button>
+            <button class="primary" id="msgSave">Salvar Modelos</button>
+          </div>
+        </div>
+      </section>
+
+      <section data-pane="billing" class="hidden">
+        <div class="card"><h3 style="margin:0 0 12px">Receita recorrente</h3><div class="kpis" id="billKpis"></div></div>
+        <div class="card"><h3 style="margin:0 0 12px">Distribuição por plano</h3><div id="revPlans"></div></div>
+        <div class="card"><h3 style="margin:0 0 12px">Faturamento por loja</h3><div id="rev"></div></div>
+      </section>
+
+      <section data-pane="audit" class="hidden">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+            <div>
+              <h3 style="margin:0 0 4px">Logs imutáveis de ações do Super Admin</h3>
+              <p class="note" style="margin:0">Toda ação do painel fica registrada aqui. A limpeza apaga o histórico e exige a senha do Super Admin.</p>
+            </div>
+            <button class="ghost danger-text" id="auditClear">Limpar auditoria</button>
+          </div>
+          <div class="note" id="auditInfo" style="margin-top:8px"></div>
+          <div style="overflow-x:auto;margin-top:8px"><table>
+            <thead><tr><th>Quando</th><th>Ação</th><th>Ator</th><th>Loja</th><th>Detalhes</th></tr></thead>
+            <tbody id="auditBody"></tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <section data-pane="settings" class="hidden">
+        <div class="card">
+          <h3 style="margin:0 0 4px">Divulgação (página de vendas)</h3>
+          <p class="note">WhatsApp exibido na landing (<code>/landing</code>) para receber novos lojistas.</p>
+          <div style="max-width:340px;margin-top:8px">
+            <label for="saSupportWa">WhatsApp da plataforma (DDI + DDD + número)</label>
+            <input type="tel" id="saSupportWa" placeholder="(85) 99999-9999" maxlength="20" autocomplete="off" style="width:100%">
+          </div>
+          <div class="err" id="saSupportErr"></div>
+          <button class="primary" id="saSupportSave">Salvar WhatsApp</button>
+        </div>
+
+        <div class="card">
+          <h3 style="margin:0 0 4px">Notificações</h3>
+          <p class="note">Avisos quando entrar novo comprovante de pagamento ou uma nova loja cadastrar.</p>
+          <label class="switch"><input type="checkbox" id="notifDesktop"> Aviso no navegador (desktop)</label>
+          <p class="note" id="notifPermHint" style="margin:0 0 8px"></p>
+          <button class="ghost" id="notifPermBtn">Permitir notificações do navegador</button>
+          <label class="switch"><input type="checkbox" id="notifSound"> Som de alerta</label>
+          <label class="switch"><input type="checkbox" id="notifWhatsapp"> Mostrar botão "Abrir no WhatsApp" no aviso</label>
+        </div>
+
+        <div class="card">
+          <h3 style="margin:0 0 4px">Conta do Super Admin</h3>
+          <p class="note">Nome e e-mail usados no acesso ao painel da plataforma.</p>
+          <div class="row" style="margin-top:8px;align-items:flex-start">
+            <div style="flex:1;min-width:220px"><label for="accName">Nome</label><input type="text" id="accName" maxlength="200" autocomplete="name" style="width:100%"></div>
+            <div style="flex:1;min-width:220px"><label for="accEmail">E-mail de acesso</label><input type="email" id="accEmail" maxlength="254" autocomplete="email" style="width:100%"></div>
+          </div>
+          <p class="note" id="accMeta"></p>
+          <div class="err" id="accErr"></div>
+          <button class="primary" id="accSave">Salvar Alterações</button>
+        </div>
+
+        <div class="card">
+          <h3 style="margin:0 0 4px">Alterar Senha</h3>
+          <p class="note">Use uma senha forte com pelo menos 8 caracteres.</p>
+          <div class="row" style="margin-top:8px;align-items:flex-start">
+            <div style="flex:1;min-width:200px"><label for="pwCurrent">Senha atual</label><input type="password" id="pwCurrent" autocomplete="current-password" style="width:100%"></div>
+            <div style="flex:1;min-width:200px"><label for="pwNew2">Nova senha</label><input type="password" id="pwNew2" autocomplete="new-password" style="width:100%"></div>
+            <div style="flex:1;min-width:200px"><label for="pwConfirm">Confirmar nova senha</label><input type="password" id="pwConfirm" autocomplete="new-password" style="width:100%"></div>
+          </div>
+          <div class="err" id="pwErr"></div>
+          <button class="primary" id="pwChange">Alterar Senha</button>
+        </div>
+
+        <div class="card">
+          <h3 style="margin:0 0 4px">Aparência</h3>
+          <p class="note">Cor de destaque e tema aplicados apenas a este painel (salvos neste navegador).</p>
+          <label style="margin-top:16px">Cor de destaque</label>
+          <div class="swatches" id="swatches">
+            <button class="swatch" data-color="#7c3aed" style="--c:#7c3aed" title="Roxo" aria-label="Roxo"></button>
+            <button class="swatch" data-color="#2563eb" style="--c:#2563eb" title="Azul" aria-label="Azul"></button>
+            <button class="swatch" data-color="#0ea5e9" style="--c:#0ea5e9" title="Céu" aria-label="Céu"></button>
+            <button class="swatch" data-color="#059669" style="--c:#059669" title="Verde" aria-label="Verde"></button>
+            <button class="swatch" data-color="#d97706" style="--c:#d97706" title="Âmbar" aria-label="Âmbar"></button>
+            <button class="swatch" data-color="#dc2626" style="--c:#dc2626" title="Vermelho" aria-label="Vermelho"></button>
+            <button class="swatch" data-color="#db2777" style="--c:#db2777" title="Rosa" aria-label="Rosa"></button>
+            <button class="swatch" data-color="#0f172a" style="--c:#0f172a" title="Grafite" aria-label="Grafite"></button>
+            <label class="swatch custom" title="Cor personalizada"><input type="color" id="accColor" value="#7c3aed" aria-label="Escolher cor personalizada"></label>
+          </div>
+          <label style="margin-top:18px">Tema</label>
+          <div class="segment" id="themeSeg">
+            <button data-theme="light" class="active">Claro</button>
+            <button data-theme="dark">Escuro</button>
+          </div>
+          <div><button class="ghost" id="appearanceReset" style="margin-top:18px">Restaurar Padrão</button></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="modalNew">
+  <div class="sheet">
+    <h3>Onboarding: Cadastrar Novo Lojista</h3>
+    <p class="note">Nova loja em segundos: após criar, abrimos o WhatsApp com as boas-vindas prontas.</p>
+    <label for="nName">Nome Fantasia da Loja *</label>
+    <input type="text" id="nName" placeholder="Pizzaria Bella" maxlength="200" autocomplete="organization">
+    <label for="nSub">Slug URL *</label>
+    <input type="text" id="nSub" placeholder="pizzaria-bella" maxlength="100" autocomplete="off" aria-describedby="slugPreview">
+    <p class="note" id="slugPreview" aria-live="polite"></p>
+    <label for="nPlan">Plano Inicial</label>
+    <select id="nPlan"><option value="free">Grátis (R$ 0)</option><option value="starter">Start</option><option value="pro" selected>Pro</option></select>
+    <label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="nTrial" style="width:auto"> Começar em trial (14 dias)</label>
+    <label for="nCnpj">Razão Social / CNPJ</label>
+    <input type="text" id="nCnpj" placeholder="Bella Alimentos LTDA — 00.000.000/0001-00" maxlength="30">
+    <label for="nPhone">WhatsApp / Telefone</label>
+    <input type="tel" id="nPhone" placeholder="(85) 99999-9999" maxlength="30" autocomplete="tel">
+    <label for="nAddr">Endereço Comercial</label>
+    <input type="text" id="nAddr" placeholder="Rua, número — bairro — cidade" maxlength="300" autocomplete="street-address">
+    <label for="nColor">Cor Primária da Marca</label>
+    <input type="color" id="nColor" value="#7c3aed" style="height:42px;padding:4px">
+    <label for="nEmail">E-mail do admin *</label>
+    <input type="email" id="nEmail" placeholder="dono@bella.com.br" maxlength="254" autocomplete="email">
+    <label for="nPass">Senha do admin (vazio = gerar)</label>
+    <input type="password" id="nPass" placeholder="mínimo 8 caracteres; vazio = gerar" minlength="8" maxlength="128" autocomplete="new-password">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:16px;color:var(--text)">
+      <input type="checkbox" id="nDemo" checked style="width:auto"> Criar com produtos de exemplo
+    </label>
+    <div class="err" id="newErr" style="text-align:left"></div>
+    <div class="foot">
+      <button class="ghost" data-close>Cancelar</button>
+      <button class="primary" id="btnCreate">Criar loja</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="modalSecret">
+  <div class="sheet">
+    <h3>Loja criada</h3>
+    <p class="note" id="secWho"></p>
+    <div class="secret" id="secBox"></div>
+    <p class="note">Anote agora: esta senha não é exibida de novo.</p>
+    <div class="foot">
+      <button class="ghost" data-close>Fechar</button>
+      <button id="secCopy">Copiar acesso</button>
+      <button class="green" id="secWa">Enviar boas-vindas no WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="modalPlan">
+  <div class="sheet">
+    <h3 id="planTitle">Alterar plano</h3>
+    <p class="note" id="planSub"></p>
+    <div class="planpick" id="planPick"></div>
+    <div class="warnbox hidden" id="planWarn"></div>
+    <div class="foot">
+      <button class="ghost" data-close>Cancelar</button>
+      <button class="primary" id="planConfirm" disabled>Confirmar Alteração de Plano</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="modalSuspend">
+  <div class="sheet">
+    <h3 id="suspTitle">Suspender loja?</h3>
+    <p class="note" id="suspTxt"></p>
+    <div class="foot">
+      <button class="ghost" data-close>Cancelar</button>
+      <button class="red" id="suspConfirm">Confirmar Suspensão por Inadimplência</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="modalWa">
+  <div class="sheet">
+    <h3>Enviar Mensagem WhatsApp ao Lojista</h3>
+    <p class="note" id="waWho"></p>
+    <label for="waModel">Modelo</label>
+    <select id="waModel">
+      <option value="onboarding">Boas-vindas</option>
+      <option value="billingReminder">Lembrete de Cobrança</option>
+      <option value="suspensionNotice">Notificação de Suspensão</option>
+      <option value="reactivationNotice">Confirmação de Reativação</option>
+    </select>
+    <label for="waPass" id="waPassLbl">Senha Inicial / Temporária</label>
+    <input type="text" id="waPass" class="mono">
+    <div class="preview" id="waPreview"></div>
+    <div class="foot">
+      <button class="ghost" data-close>Fechar</button>
+      <button id="waCopy">Copiar Mensagem</button>
+      <button class="green" id="waSend">Enviar no WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="modalPw">
+  <div class="sheet">
+    <h3>Redefinir Senha do Lojista</h3>
+    <p class="note" id="pwWho"></p>
+    <p class="note">Gere uma senha provisória para o lojista voltar ao painel sem travar a operação.</p>
+    <label for="pwNew">Nova Senha Provisória</label>
+    <div class="row"><input type="text" id="pwNew" readonly style="flex:1;font-family:monospace"><button id="pwGen">Gerar Nova senha</button></div>
+    <div class="preview" id="pwMsg"></div>
+    <div class="foot">
+      <button class="ghost" data-close>Fechar</button>
+      <button id="pwCopy">Copiar Mensagem de Acesso</button>
+      <button class="green" id="pwSend">Enviar no WhatsApp do Lojista</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="sa-alert hidden" id="saAlert" role="alert" aria-live="assertive">
+  <div class="sa-alert-body"><strong id="saAlertTitle"></strong><span id="saAlertBody"></span></div>
+  <div class="sa-alert-actions">
+    <button class="green" id="saAlertWa">Abrir no WhatsApp</button>
+    <button class="ghost" id="saAlertClose">Fechar</button>
+  </div>
+</div>
+
+<script src="../js/super-admin.js?v=13"></script>
+</body>
+</html>

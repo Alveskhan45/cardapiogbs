@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+/* Simular o display de acompanhamento */
+.track-hero { background: #f5f5f5; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+.track-step { display: flex; align-items: center; margin: 8px 0; }
+.track-dot { width: 24px; height: 24px; border-radius: 50%; border: 2px solid; margin-right: 12px; }
+.done { background: #4caf50; }
+.active { background: #2196f3; }
+.canceled { background: #f44336; }
+.track-label { flex: 1; }
+.track-when { font-size: 0.8em; color: #666; margin-top: 2px; }
+.track-wait { color: #666; font-size: 0.9em; }
+</script></head><body>
+<div id="trackBody" style="width: 100%; max-width: 600px; margin: 0 auto;"></div>
+
+<script>
+// Simular dados de exemplo (como viria do servidor)
+const order = {
+  id: '#1234',
+  trackCode: 'K7T2M',
+  status: 'entregue',
+  total: 45.50,
+  statusHistory: [
+    { status: 'pendente', at: '2026-10-14T10:00:00.000Z' },
+    { status: 'preparando', at: '2026-10-14T10:30:00.000Z' },
+    { status: 'entregando', at: '2026-10-14T11:00:00.000Z' },
+    { status: 'entregue', at: '2026-10-14T12:00:00.000Z' }
+  }
+};
+
+// Elementos do DOM
+const trackBody = document.getElementById('trackBody');
+
+// Formatar horário
+function fmtTrackTime(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const sameDay = d.toDateString() === new Date().toDateString();
+  const hm = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return sameDay ? hm : d.toLocaleDateString('pt-BR') + ' ' + hm;
+}
+
+// Função trackTimes do código original
+function trackTimes(o) {
+  const map = {};
+  (Array.isArray(o.statusHistory) ? o.statusHistory : []).forEach(e => {
+    if (e && e.status && e.at) map[e.status] = e.at;
+  });
+  if (!map.pendente && o.createdAt) map.pendente = o.createdAt || new Date();
+  if (o.status && !map[o.status]) map[o.status] = o.statusUpdatedAt || o.createdAt;
+  return map;
+}
+
+// Função trackStatusLabel
+function trackStatusLabel(o) {
+  if (!o) return '—';
+  if (o.status === 'cancelado') return 'Cancelado';
+  return 'Pedido recebido'; // Simplificado para demo
+}
+
+// Função isTrackDone
+function isTrackDone(o) {
+  return !(o && o.status === 'entregue' || o.status === 'cancelado');
+}
+
+// Função renderTrackBody adaptada para garantir código visível e todos os passos
+function renderTrackBody(o, auto) {
+  const body = trackBody;
+  if (!body) return;
+  
+  const canceled = o.status === 'cancelado';
+  const done = isTrackDone(o);
+  const live = !!auto && !done;
+  const idx = ['pendente', 'preparando', 'entregando', 'entregue'].indexOf(o.status);
+  const times = trackTimes(o);
+  const TRACK_STEPS = ['pendente', 'preparando', 'entregando', 'entregue'];
+  const TRACK_LABELS = { pendente: 'Pedido recebido', preparando: 'Em preparo', entregando: 'Saiu para entrega', entregue: 'Entregue' };
+  
+  const steps = TRACK_STEPS.map((s, i) => {
+    let cls = '', dot = i + 1;
+    if (canceled) { cls = 'canceled'; dot = '✕'; }
+    else if (idx >= 0) {
+      if (i < idx || (done && i === idx)) { cls = 'done'; dot = '✓'; }
+      else if (i === idx) { cls = 'active'; }
+    }
+    const when = times[s] ? fmtTrackTime(times[s]) : '';
+    return `<div class="track-step ${cls}">
+      <div class="track-dot">${dot}</div>
+      <div class="track-label">
+        <b>${TRACK_LABELS[s]}</b>
+        ${when ? `<small class="track-when">${when}</small>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  const waitMsg = done
+    ? 'Pedido entregue'
+    : (live ? 'Atualizando a cada 15s' : '');
+
+  // GARANTIR que o código apareça sempre
+  const codigo = o.trackCode || '—';
+  
+  body.innerHTML = `
+    <div class="track-hero">
+      <div class="succ-ico">•</div>
+      <h2>Pedido #${o.id.substring('#').substr(0,4) + '...'} (Code: ${codigo})</h2>
+      <p><b>${trackStatusLabel(o)}</b> • Total R$ ${(o.total || 0).toFixed(2).replace('.', ',')}</p>
+    </div>
+    <div class="track-steps">${steps}</div>
+    ${waitMsg ? `<div class="track-wait">${waitMsg}</div>` : ''}
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap">
+      <button class="btn ghost sm" style="margin: 4px;">Atualizar</button>
+    </div>
+    <p class="hint" style="text-align:center;margin-top:12px; font-size:0.8em; color: #555;">
+      Código: <b style="letter-spacing:2px; color: #d32f2f;">${codigo}</b> • Mostra passos: Pedido → Preparo → Entrega
+    </div>
+  `;
+}
+
+// Exibir com o código do pedido sempre visível
+renderTrackBody(order, true);
+
+// Botão para simular outro pedido
+setTimeout(() => {
+  const order2 = {
+    id: '#5678',
+    trackCode: 'A3B5',
+    status: 'preparando',
+    total: 32.20,
+    statusHistory: [
+      { status: 'pendente', at: '2026-10-14T11:00:00.000Z' },
+      { status: 'preparando', at: '2026-10-14T11:15:00.000Z' }
+    }
+  };
+  renderTrackBody(order2, true);
+}, 3000);
+</script>
+</body></html>

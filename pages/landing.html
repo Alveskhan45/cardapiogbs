@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CardapioDigital SaaS — Cardápio digital para sua distribuidora</title>
+<meta name="description" content="Cardápio digital com pedidos no WhatsApp, painel administrativo e planos para todos os tamanhos de loja.">
+<link rel="icon" href="data:,">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ffffff; --bg2:#f8fafc; --bg3:#f1f5f9;
+  --card:#ffffff; --card2:#f8fafc;
+  --line:#e2e8f0; --line2:#cbd5e1;
+  --txt:#0f172a; --txt2:#334155; --txt3:#64748b; --txt4:#94a3b8;
+  --pri:#0f766e; --pri2:#0d9488; --pri-dark:#115e59;
+  --ok:#16a34a; --ok-bg:#f0fdf4;
+  --blue:#2563eb; --blue-bg:#eff6ff;
+  --radius:8px; --radius-lg:12px;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --shadow-lg:0 10px 25px rgba(0,0,0,.08),0 4px 10px rgba(0,0,0,.04);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--txt);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:var(--pri);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:1140px;margin:0 auto;padding:0 24px}
+
+/* ===== HEADER ===== */
+.top{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:12px;padding:14px 24px}
+.logo{width:36px;height:36px;border-radius:var(--radius);background:var(--pri);display:flex;align-items:center;justify-content:center;color:#fff}
+.top b{font-size:17px;font-weight:700;color:var(--txt)}
+.top nav{display:flex;gap:24px;margin-left:16px}
+.top nav a{color:var(--txt3);text-decoration:none;font-size:14px;font-weight:500}
+.top nav a:hover{color:var(--txt)}
+.top .sp{flex:1}
+
+/* ===== BUTTONS ===== */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid transparent;border-radius:var(--radius);padding:10px 20px;cursor:pointer;font-weight:600;font-size:14px;transition:all .15s;text-decoration:none;white-space:nowrap}
+.btn:hover{text-decoration:none}
+.btn.pri{background:var(--pri);color:#fff}
+.btn.pri:hover{background:var(--pri-dark)}
+.btn.outline{border-color:var(--line2);background:#fff;color:var(--txt2)}
+.btn.outline:hover{border-color:var(--txt3);background:var(--bg2)}
+.btn.sm{padding:7px 14px;font-size:13px}
+.btn.block{width:100%}
+
+/* ===== HERO ===== */
+.hero{padding:80px 0 64px;text-align:center;background:linear-gradient(180deg,var(--bg2) 0%,var(--bg) 100%)}
+.hero .badge{display:inline-block;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--pri);background:var(--ok-bg);border:1px solid #bbf7d0;border-radius:999px;padding:5px 14px;margin-bottom:20px}
+.hero h1{font-size:clamp(32px,5vw,52px);line-height:1.15;margin:0 0 16px;font-weight:800;letter-spacing:-.02em;color:var(--txt)}
+.hero h1 span{color:var(--pri)}
+.hero p{color:var(--txt3);font-size:18px;max-width:620px;margin:0 auto 32px}
+.hero .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.hero .cta .btn{padding:12px 24px;font-size:15px}
+
+/* ===== SECTIONS ===== */
+.section{padding:64px 0}
+.section.alt{background:var(--bg2)}
+.section-header{text-align:center;margin-bottom:40px}
+.section-header h2{font-size:28px;font-weight:700;margin:0 0 8px;color:var(--txt)}
+.section-header p{color:var(--txt3);font-size:16px;max-width:560px;margin:0 auto}
+
+/* ===== STEPS ===== */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.step{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-lg);padding:28px}
+.step-num{width:36px;height:36px;border-radius:50%;background:var(--pri);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;margin-bottom:16px}
+.step h3{font-size:16px;font-weight:600;margin:0 0 8px;color:var(--txt)}
+.step p{color:var(--txt3);font-size:14px;margin:0}
+
+/* ===== PLANS ===== */
+.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;align-items:stretch}
+.plan{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-lg);padding:32px 24px;display:flex;flex-direction:column;position:relative}
+.plan.pop{border-color:var(--pri);box-shadow:var(--shadow-lg)}
+.plan .flag{position:absolute;top:-12px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:700;background:var(--pri);color:#fff;border-radius:999px;padding:4px 14px;white-space:nowrap}
+.plan h3{font-size:18px;font-weight:600;margin:0;color:var(--txt)}
+.plan .price{font-size:36px;font-weight:800;margin:16px 0 4px;color:var(--txt)}
+.plan .per{color:var(--txt3);font-size:14px;margin-bottom:24px}
+.plan ul{list-style:none;margin:0 0 24px;padding:0;font-size:14px;color:var(--txt2);flex:1}
+.plan ul li{padding:8px 0;border-bottom:1px solid var(--bg3);display:flex;align-items:center;gap:8px}
+.plan ul li:last-child{border-bottom:none}
+.plan ul li::before{content:"";display:inline-block;width:16px;height:16px;background:var(--ok-bg);border-radius:50%;flex-shrink:0}
+
+/* ===== FEATURES ===== */
+.feats{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.feat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-lg);padding:24px}
+.feat .ic{width:40px;height:40px;border-radius:var(--radius);background:var(--bg2);display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+.feat h3{font-size:15px;font-weight:600;margin:0 0 6px;color:var(--txt)}
+.feat p{color:var(--txt3);font-size:13px;margin:0}
+
+/* ===== FAQ ===== */
+.faq{max-width:680px;margin:0 auto}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px;margin-bottom:10px}
+.faq summary{cursor:pointer;font-weight:600;font-size:15px;color:var(--txt)}
+.faq p{color:var(--txt3);font-size:14px;margin:10px 0 0}
+
+/* ===== CTA FINAL ===== */
+.cta-final{text-align:center;background:var(--txt);border-radius:var(--radius-lg);padding:64px 32px;margin:0 auto 64px;max-width:800px}
+.cta-final h2{color:#fff;font-size:28px;font-weight:700;margin:0 0 10px}
+.cta-final p{color:var(--txt4);font-size:16px;margin:0 0 28px}
+.cta-final .btn{padding:12px 28px;font-size:15px}
+
+/* ===== FOOTER ===== */
+.footer{border-top:1px solid var(--line);padding:28px 0;background:var(--bg2)}
+.footer .wrap{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.footer .sp{flex:1}
+.footer a{color:var(--txt3);font-size:14px}
+.footer .brand{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--txt)}
+
+/* ===== TOAST ===== */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--txt);color:#fff;border-radius:var(--radius);padding:12px 20px;font-size:14px;opacity:0;pointer-events:none;transition:all .3s;z-index:200}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ===== MODALS ===== */
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;padding:20px;z-index:150;backdrop-filter:blur(4px)}
+.modal.show{display:flex}
+.modal .sheet{background:#fff;border-radius:var(--radius-lg);padding:32px;width:100%;max-width:440px;box-shadow:var(--shadow-lg)}
+.modal h3{margin:0 0 4px;font-size:20px;font-weight:700;color:var(--txt)}
+.modal .muted{color:var(--txt3);font-size:14px;margin:0 0 16px}
+.modal .foot{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
+.modal label{display:block;font-size:13px;font-weight:500;color:var(--txt2);margin:12px 0 6px}
+.modal input{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--txt);border-radius:var(--radius);padding:10px 12px;font-size:14px}
+.modal input:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px rgba(15,118,110,.1)}
+.modal .err{color:#dc2626;font-size:13px;min-height:20px;margin-top:8px}
+.modal .preview{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:14px;font-family:ui-monospace,monospace;font-size:13px;white-space:pre-wrap;margin:12px 0;color:var(--txt2)}
+.hidden{display:none!important}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:900px){
+  .steps,.plans{grid-template-columns:1fr;gap:16px}
+  .feats{grid-template-columns:repeat(2,1fr)}
+  .top nav{display:none}
+  .hero{padding:56px 0 48px}
+}
+@media(max-width:600px){
+  .feats{grid-template-columns:1fr}
+  .section{padding:48px 0}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <span class="logo">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>
+    </span>
+    <b>CardapioDigital</b>
+    <nav>
+      <a href="#como-funciona">Como funciona</a>
+      <a href="#planos">Planos</a>
+      <a href="#recursos">Recursos</a>
+      <a href="#faq">Dúvidas</a>
+    </nav>
+    <span class="sp"></span>
+    <button class="btn outline sm" id="btnClientLogin">Entrar na loja</button>
+    <a class="btn pri sm" href="#planos">Começar</a>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <span class="badge">Plataforma de cardápio digital</span>
+    <h1>Cardápio digital para sua <span>distribuidora</span></h1>
+    <p>Receba pedidos pelo WhatsApp, gerencie produtos e estoque, e acompanhe vendas — tudo em uma plataforma simples e profissional.</p>
+    <div class="cta">
+      <a class="btn outline" id="btnWaHero" href="#planos">Falar no WhatsApp</a>
+      <a class="btn pri" href="#planos">Ver planos</a>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <section class="section" id="como-funciona">
+    <div class="section-header">
+      <h2>Como funciona</h2>
+      <p>Do cadastro ao primeiro pedido em 3 passos.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Cadastre sua loja</h3>
+        <p>Escolha um plano e configure nome, WhatsApp e endereço. Seu link fica pronto na hora.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Monte o cardápio</h3>
+        <p>Adicione produtos, fotos, preços e promoções pelo painel — sem precisar de programador.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Receba pedidos</h3>
+        <p>Cada pedido chega organizado no seu WhatsApp com itens, valores e endereço de entrega.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="section alt">
+  <div class="wrap">
+    <div class="section-header">
+      <h2>Planos</h2>
+      <p>Comece gratuitamente por 7 dias. Sem fidelidade.</p>
+    </div>
+    <div class="plans" id="planGrid">
+      <p style="color:var(--txt3);text-align:center;grid-column:1/-1">Carregando planos…</p>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <section class="section" id="recursos">
+    <div class="section-header">
+      <h2>Recursos</h2>
+      <p>Tudo que sua distribuidora precisa para vender online.</p>
+    </div>
+    <div class="feats">
+      <div class="feat">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
+        <h3>Cardápio personalizado</h3>
+        <p>Logo, cores e banner da sua loja.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></div>
+        <h3>Carrinho e checkout</h3>
+        <p>Variações, adicionais, frete automático.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <h3>Pedidos no WhatsApp</h3>
+        <p>Cada venda formatada, pronta para confirmar.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></div>
+        <h3>Cupons de desconto</h3>
+        <p>Percentual, valor fixo ou frete grátis.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round"><path d="M21 8V7H3v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8z"/><path d="M3 8l2-5h14l2 5"/></svg></div>
+        <h3>Controle de estoque</h3>
+        <p>Baixa automática e alertas de mínimo.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+        <h3>Rastreio de pedido</h3>
+        <p>Cliente acompanha o status sem ligar.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+        <h3>Relatórios</h3>
+        <p>Histórico de vendas e desempenho.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <h3>Equipe</h3>
+        <p>Usuários com papéis e permissões.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="wrap">
+  <section class="section" id="faq">
+    <div class="section-header">
+      <h2>Dúvidas frequentes</h2>
+    </div>
+    <div class="faq">
+      <details><summary>Preciso instalar algum aplicativo?</summary><p>Não. O cardápio abre no navegador e o painel também. Nada para baixar.</p></details>
+      <details><summary>Como recebo os pedidos?</summary><p>Cada pedido chega como mensagem organizada no WhatsApp da loja, com itens, valores, endereço e pagamento.</p></details>
+      <details><summary>Posso trocar de plano depois?</summary><p>Sim. Upgrade libera recursos na hora; downgrade vale a partir do próximo ciclo.</p></details>
+      <details><summary>Existe fidelidade?</summary><p>Não. A assinatura é mensal e pode ser cancelada quando quiser.</p></details>
+    </div>
+  </section>
+</div>
+
+<div class="wrap">
+  <div class="cta-final">
+    <h2>Pronto para começar?</h2>
+    <p>7 dias grátis no plano free. Sem cartão de crédito.</p>
+    <a class="btn pri" href="#planos">Escolher plano</a>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="wrap">
+    <span class="brand">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="2.5" stroke-linecap="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>
+      CardapioDigital
+    </span>
+    <span class="sp"></span>
+    <a href="#planos">Planos</a>
+    <a href="#faq">Dúvidas</a>
+  </div>
+</footer>
+
+<div class="modal" id="planModal">
+  <div class="sheet">
+    <h3 id="pmTitle">Assinar plano</h3>
+    <p class="muted" id="pmSub"></p>
+    <div class="preview" id="pmMsg"></div>
+    <div class="foot">
+      <button class="btn outline" id="pmClose">Fechar</button>
+      <button class="btn pri" id="pmWa">Chamar no WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="loginModal">
+  <div class="sheet">
+    <h3>Entrar na loja</h3>
+    <p class="muted">Digite o nome ou apelido da loja para abrir o cardápio.</p>
+    <label for="loginSlug">Nome ou apelido</label>
+    <input type="text" id="loginSlug" placeholder="ex.: Alves Distribuidora" autocomplete="off">
+    <p class="muted" id="loginPreview"></p>
+    <div class="err" id="loginErr"></div>
+    <div class="foot">
+      <button class="btn outline" id="loginClose">Fechar</button>
+      <button class="btn pri" id="loginGo">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="signupModal">
+  <div class="sheet">
+    <h3 id="suTitle">Criar conta</h3>
+    <p class="muted" id="suSub">Sua conta é criada agora e o plano é liberado após confirmação.</p>
+    <form id="suForm" novalidate>
+      <label for="suStore">Nome da loja</label>
+      <input type="text" id="suStore" placeholder="ex.: Alves Distribuidora" autocomplete="organization">
+      <label for="suOwner">Seu nome</label>
+      <input type="text" id="suOwner" placeholder="ex.: José Alves" autocomplete="name">
+      <label for="suPhone">WhatsApp (com DDD)</label>
+      <input type="tel" id="suPhone" placeholder="ex.: 5585999999999" autocomplete="tel">
+      <label for="suEmail">E-mail (login do painel)</label>
+      <input type="email" id="suEmail" placeholder="voce@email.com" autocomplete="email">
+      <label for="suPass">Senha (mínimo 8 caracteres)</label>
+      <input type="password" id="suPass" placeholder="••••••••" autocomplete="new-password">
+      <p class="err" id="suErr"></p>
+    </form>
+    <div class="foot">
+      <button class="btn outline" id="suClose">Cancelar</button>
+      <button class="btn pri" id="suSubmit">Criar conta</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="statusModal">
+  <div class="sheet">
+    <h3>Minha contratação</h3>
+    <div id="stBody"><p class="muted">Carregando…</p></div>
+    <div class="foot">
+      <button class="btn outline" id="stClose">Fechar</button>
+      <button class="btn pri" id="stConfirm">Já paguei</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* Se vier com ?tenant=..., redireciona para o cardápio da loja */
+if (new URLSearchParams(location.search).get('tenant')) {
+  location.replace('/cardapio' + location.search);
+}
+</script>
+<script>
+var PLATFORM_WHATSAPP = '';
+
+var FEAT_LABELS = {
+  coupons: 'Cupons de desconto', reports: 'Relatórios', loyalty: 'Fidelidade',
+  multi_users: 'Equipe', api_access: 'Acesso à API', priority_support: 'Suporte prioritário'
+};
+
+function toast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(function () { t.classList.remove('on'); }, 2800);
+}
+function brl(v) { return 'R$ ' + (Number(v) || 0).toFixed(2).replace('.', ','); }
+function limTxt(v) { v = Number(v); return (v === 0 || v === -1) ? 'ilimitado' : v; }
+
+var _leadSent = {};
+function sendLead(key, payload) {
+  if (_leadSent[key]) return;
+  _leadSent[key] = true;
+  fetch('/api/public/leads', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {}), keepalive: true
+  }).catch(function () {});
+}
+
+function waNumber() { return String(PLATFORM_WHATSAPP || '').replace(/\D/g, ''); }
+
+var PLANS_CACHE = [];
+var FALLBACK_PLANS = [
+  { id: 'free', name: 'Grátis', priceMonthly: 0, limits: { products: 20, orders_month: 200, users: 1 }, features: { coupons: true } },
+  { id: 'starter', name: 'Start', priceMonthly: 99.9, limits: { products: 100, orders_month: 1000, users: 2 }, features: { coupons: true, reports: true } },
+  { id: 'pro', name: 'Pro', priceMonthly: 299.9, limits: { products: 500, orders_month: 10000, users: 10 }, features: { coupons: true, reports: true, multi_users: true } }
+];
+
+function planMessage(p) {
+  return 'Olá! Quero assinar o plano ' + p.name + ' (' + (Number(p.priceMonthly) === 0 ? 'Grátis' : brl(p.priceMonthly) + '/mês') + ')';
+}
+
+var CONTRACT_KEY = 'saas_contract_token';
+var STATE = { plan: null, contract: null, pix: null };
+
+function findPlan(id) {
+  var list = PLANS_CACHE.length ? PLANS_CACHE : FALLBACK_PLANS;
+  for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+  return null;
+}
+function saveToken(t) { try { localStorage.setItem(CONTRACT_KEY, t); } catch (e) {} }
+function readToken() { try { return localStorage.getItem(CONTRACT_KEY) || ''; } catch (e) { return ''; } }
+
+function openSignup(planId) {
+  var p = findPlan(planId);
+  if (!p) { toast('Plano indisponível.'); return; }
+  STATE.plan = p;
+  document.getElementById('suTitle').textContent = 'Contratar ' + p.name;
+  document.getElementById('suSub').textContent = Number(p.priceMonthly) === 0 ? 'Plano gratuito por 7 dias.' : brl(p.priceMonthly) + '/mês. Crie sua conta agora.';
+  document.getElementById('suErr').textContent = '';
+  document.getElementById('signupModal').classList.add('show');
+}
+
+async function submitSignup() {
+  var err = document.getElementById('suErr');
+  err.textContent = '';
+  var store = document.getElementById('suStore').value.trim();
+  var owner = document.getElementById('suOwner').value.trim();
+  var phone = document.getElementById('suPhone').value.trim();
+  var email = document.getElementById('suEmail').value.trim();
+  var pass = document.getElementById('suPass').value;
+  if (store.length < 2) { err.textContent = 'Informe o nome da loja.'; return; }
+  if (!email) { err.textContent = 'Informe seu e-mail.'; return; }
+  if (pass.length < 8) { err.textContent = 'A senha precisa de pelo menos 8 caracteres.'; return; }
+  var btn = document.getElementById('suSubmit');
+  btn.disabled = true; btn.textContent = 'Criando…';
+  try {
+    var r = await fetch('/api/public/signup', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan: STATE.plan.id, storeName: store, ownerName: owner, phone: phone, email: email, password: pass })
+    });
+    var d = await r.json();
+    if (!d.ok) { err.textContent = d.error || 'Não foi possível criar a conta.'; return; }
+    saveToken(d.signupToken);
+    document.getElementById('signupModal').classList.remove('show');
+    ['suStore','suOwner','suPhone','suEmail','suPass'].forEach(function(id){document.getElementById(id).value='';});
+    toast('Conta criada!');
+  } catch (e) { err.textContent = 'Falha de conexão.'; }
+  finally { btn.disabled = false; btn.textContent = 'Criar conta'; }
+}
+
+function planCard(p) {
+  var price = Number(p.priceMonthly || 0);
+  var lim = p.limits || {}, feat = p.features || {};
+  var featsOn = Object.keys(FEAT_LABELS).filter(function(k){return feat[k];});
+  var benefits = [
+    limTxt(lim.products) + ' produtos',
+    limTxt(lim.orders_month) + ' pedidos/mês',
+    limTxt(lim.users) + ' usuário(s)'
+  ].concat(featsOn.slice(0,4).map(function(k){return FEAT_LABELS[k];}));
+  var li = benefits.map(function(b){return '<li>'+b+'</li>';}).join('');
+  var pop = p.id === 'pro';
+  return '<div class="plan'+(pop?' pop':'')+'">'
+    + (pop?'<span class="flag">Recomendado</span>':'')
+    + '<h3>'+p.name+'</h3>'
+    + '<div class="price">'+(price===0?'Grátis':brl(price))+'</div>'
+    + '<div class="per">'+(price===0?'7 dias grátis':'/mês')+'</div>'
+    + '<ul>'+li+'</ul>'
+    + '<button class="btn '+(pop?'pri':'outline')+' block" data-plan-cta="'+p.id+'">'
+    + (price===0?'Começar grátis':'Contratar')+'</button></div>';
+}
+
+function openPlanModal(id) {
+  var p = findPlan(id);
+  if (!p) return;
+  sendLead('plan:'+p.id,{plan:p.id,source:'plan'});
+  var price = Number(p.priceMonthly||0);
+  document.getElementById('pmTitle').textContent = p.name;
+  document.getElementById('pmSub').textContent = price===0?'Plano gratuito por 7 dias, sem cartão.':brl(price)+'/mês, sem fidelidade.';
+  document.getElementById('pmMsg').textContent = planMessage(p);
+  document.getElementById('planModal').classList.add('show');
+}
+
+async function loadPlans() {
+  var grid = document.getElementById('planGrid');
+  try {
+    var r = await fetch('/api/public/plans');
+    var d = await r.json();
+    if (!d.ok || !d.plans || !d.plans.length) throw new Error();
+    PLANS_CACHE = d.plans;
+    if (d.support_whatsapp) PLATFORM_WHATSAPP = d.support_whatsapp;
+  } catch(e) {
+    PLANS_CACHE = FALLBACK_PLANS;
+  }
+  grid.innerHTML = PLANS_CACHE.map(planCard).join('');
+  grid.querySelectorAll('[data-plan-cta]').forEach(function(btn){
+    btn.onclick = function(){ openSignup(btn.getAttribute('data-plan-cta')); };
+  });
+}
+
+function cleanSlug(v) {
+  var s = String(v||'').trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9-]{0,98}[a-z0-9]$/.test(s)?s:'';
+}
+async function clientLoginGo() {
+  var typed = String(document.getElementById('loginSlug').value||'').trim().toLowerCase();
+  var err = document.getElementById('loginErr');
+  err.textContent = '';
+  if (!typed) { err.textContent = 'Digite o nome da loja.'; return; }
+  var btn = document.getElementById('loginGo');
+  btn.disabled = true; btn.textContent = 'Buscando…';
+  try {
+    var r = await fetch('/api/public/tenant/'+encodeURIComponent(typed));
+    var d = await r.json();
+    if (!d.ok||!d.tenant) { err.textContent = 'Loja não encontrada.'; return; }
+    location.href = '/?tenant='+encodeURIComponent(d.tenant.subdomain);
+  } catch(e) { err.textContent = 'Erro de conexão.'; }
+  finally { btn.disabled = false; btn.textContent = 'Entrar'; }
+}
+
+function openModal(id) {
+  var m = document.getElementById(id);
+  if (m) m.classList.add('show');
+}
+function closeModal(id) {
+  var m = document.getElementById(id);
+  if (m) m.classList.remove('show');
+}
+
+document.addEventListener('click', function(e) {
+  var t = e.target;
+
+  if (t.id === 'btnClientLogin' || (t.closest && t.closest('#btnClientLogin'))) {
+    e.preventDefault();
+    document.getElementById('loginErr').textContent = '';
+    document.getElementById('loginSlug').value = '';
+    openModal('loginModal');
+    setTimeout(function(){ document.getElementById('loginSlug').focus(); }, 50);
+  }
+
+  if (t.id === 'loginClose' || (t.closest && t.closest('#loginClose'))) closeModal('loginModal');
+  if (t.id === 'loginGo' || (t.closest && t.closest('#loginGo'))) clientLoginGo();
+  if (t.id === 'pmClose' || (t.closest && t.closest('#pmClose'))) closeModal('planModal');
+  if (t.id === 'suClose' || (t.closest && t.closest('#suClose'))) closeModal('signupModal');
+  if (t.id === 'stClose' || (t.closest && t.closest('#stClose'))) closeModal('statusModal');
+
+  if (t.id === 'btnWaHero' || (t.closest && t.closest('#btnWaHero'))) {
+    e.preventDefault();
+    var n = waNumber();
+    if (n) window.open('https://wa.me/' + n + '?text=' + encodeURIComponent('Olá! Quero saber mais sobre o CardapioDigital'), '_blank');
+    else openModal('planModal');
+  }
+
+  var cta = t.closest ? t.closest('[data-plan-cta]') : null;
+  if (cta) openSignup(cta.getAttribute('data-plan-cta'));
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && document.activeElement && document.activeElement.id === 'loginSlug') {
+    clientLoginGo();
+  }
+  if (e.key === 'Enter' && document.activeElement && document.activeElement.id === 'suForm') {
+    e.preventDefault(); submitSignup();
+  }
+});
+
+loadPlans();
+</script>
+</body>
+</html>

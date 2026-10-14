@@ -1,0 +1,544 @@
+Essa é uma parte fundamental do seu SaaS! A transação entre o cliente que contrata um plano pela Landing Page e o Super Admin precisa ser automatizada, segura e rastreável. O ideal é que o cliente consiga contratar, pagar e começar a usar o sistema sem precisar que o Super Admin faça o cadastro manualmente.
+
+Vou explicar como eu estruturaria esse fluxo no seu projeto.
+
+# 1. Como funciona a transação entre cliente e Super Admin
+
+Imagine que você tenha um SaaS com três planos: Básico, Profissional e Empresarial.
+
+1\. Landing Page
+
+O cliente conhece o SaaS, compara os planos e clica em "Contratar".
+
+2\. Cadastro do cliente
+
+Cria a conta, informa os dados da empresa e escolhe o plano.
+
+3\. Pagamento
+
+O sistema encaminha o cliente ao provedor de pagamentos.
+
+4\. Confirmação automática
+
+O backend valida a confirmação do pagamento e ativa a assinatura.
+
+5\. Acesso liberado
+
+O cliente entra no painel da empresa e utiliza os recursos contratados.
+
+Enquanto isso, o Super Admin consegue acompanhar tudo pelo painel administrativo: quem se cadastrou, quem pagou, quais assinaturas estão ativas, quem está inadimplente e quanto o SaaS está faturando.
+
+## 2. Quem faz o quê?
+
+| Participante         | Responsabilidade                                       |
+| -------------------- | ------------------------------------------------------ |
+| Landing Page         | Apresentar planos e iniciar a contratação              |
+| Cliente              | Cadastrar-se, informar os dados e pagar                |
+| Backend do SaaS      | Validar dados, criar a assinatura e controlar o acesso |
+| Gateway de pagamento | Processar pagamentos, cobranças e reembolsos           |
+| Super Admin          | Gerenciar clientes, planos, pagamentos e exceções      |
+| Banco de dados       | Registrar o histórico completo da transação            |
+
+Um detalhe essencial: o Super Admin não precisa receber o dinheiro diretamente. O pagamento é processado pelo provedor de pagamentos e creditado conforme a configuração da conta comercial do seu SaaS. O painel administrativo apenas registra e apresenta as informações financeiras necessárias.
+
+# 3. Como escolher o meio de pagamento?
+
+Para um SaaS no Brasil, eu avaliaria estas opções:
+
+[Mercado Pago Logo in Vector Formats](https://images.openai.com/static-rsc-4/Nifs8AaUjZT5iZGbmpjQrbx2RES2EhyPE3kfa_sfNeCy7iOF82Vtv4bvGQAnrknEMKmy-6N0ivh0lyQp5INRIXQuqlQfpX1Zlyrnj7q6kQL9JL4j-v4Qie8XRxnWvYmXmZ8gkp8YpeLDjpkokfc7kE3jvONwH7xhD3oTJBSaYvY?purpose=inline)
+
+Mercado Pago
+
+Pode ser interessante para receber via Pix e cartão, conforme os produtos habilitados para sua conta. É uma opção a avaliar para o mercado brasileiro.
+
+[Documentação para desenvolvedores](https://www.mercadopago.com.br/developers/pt)
+
+[Stripe Logo Download (SVG, PNG, EPS, PDF) | PixelBrands](https://images.openai.com/static-rsc-4/bItoKCvKU9fOiD3ssLAmDyaWSEtqiUleEKzqhKGVUo-ouARUnCcmD1dThRfjZJUjy8IPaTHEGDYYZ0W1yx6cZAgdpXV77bJfj1CmSVckC7It0R3l6GT4qcxX6jPJVky_QNczLdihP7rG9xZVxZylPSuZuF89AHHgtiL8pefpSzg?purpose=inline)
+
+Stripe
+
+Uma alternativa para avaliar assinaturas recorrentes, cobrança automática por cartão e gerenciamento de planos.
+
+[Documentação de assinaturas e faturamento](https://docs.stripe.com/billing)
+
+A escolha depende de como você pretende cobrar, das condições comerciais disponíveis e da necessidade de Pix, cartão, boleto ou cobrança recorrente. Não é necessário integrar vários provedores no início.
+
+# 4. Como o sistema registra a contratação no banco?
+
+Eu criaria pelo menos estas tabelas no PostgreSQL:
+
+| Tabela           | Informações registradas                           |
+| ---------------- | ------------------------------------------------- |
+| `users`          | Dados de acesso do usuário                        |
+| `tenants`        | Empresa ou organização cliente                    |
+| `plans`          | Planos oferecidos e seus preços                   |
+| `subscriptions`  | Plano, período e status da assinatura             |
+| `payments`       | Valor, provedor e status do pagamento             |
+| `payment_events` | Eventos recebidos do provedor e seu processamento |
+| `invoices`       | Cobranças e documentos financeiros aplicáveis     |
+| `audit_logs`     | Registro das ações administrativas relevantes     |
+
+O cadastro do cliente e a assinatura precisam ser relacionados corretamente. Em um SaaS multiempresa, cada empresa deve acessar somente os dados do seu próprio ambiente.
+
+## 5. Exemplo real de uma contratação
+
+Imagine que o plano Profissional custe R$ 99,90 por mês.
+
+Nova assinatura
+
+Exemplo
+
+Plano
+
+Profissional
+
+Valor mensal
+
+## R$ 99,90
+
+Status inicial
+
+Aguardando pagamento
+
+Quando o pagamento for confirmado:
+
+1. O provedor envia um webhook ao backend.
+2. O backend valida a autenticidade do evento e consulta o pagamento quando necessário.
+3. O sistema registra o pagamento e ativa a assinatura de forma idempotente, evitando ativações duplicadas.
+4. A empresa passa a ter acesso aos recursos do plano.
+5. O Super Admin visualiza a contratação no painel financeiro.
+
+Se o cliente não pagar, o sistema mantém a assinatura no estado apropriado, sem liberar recursos pagos indevidamente. Se houver renovação, cancelamento, reembolso ou inadimplência, o status deve ser atualizado conforme as regras do contrato.
+
+# 6. O que o Super Admin poderá controlar?
+
+No painel Super Admin, eu criaria uma seção chamada Assinaturas e Transações, com estas telas:
+
+- Assinaturas: plano, empresa, início, renovação e status.
+- Pagamentos: valor, data, provedor, identificador e resultado.
+- Inadimplência: cobranças vencidas e regras de suspensão.
+- Reembolsos: solicitações, processamento e histórico.
+- Cupons e descontos: códigos promocionais e condições.
+- Relatórios financeiros: receita recorrente, cancelamentos e pagamentos confirmados.
+- Auditoria: registro de quem realizou cada ação administrativa.
+
+O Super Admin poderá executar ações autorizadas, mas não deve poder marcar um pagamento como confirmado apenas alterando um campo na interface. Toda confirmação precisa ter uma origem confiável e um registro de auditoria.
+
+# 7. A arquitetura que eu recomendo
+
+Para o seu SaaS, o fluxo ideal é:
+
+- Frontend: Landing Page, cadastro, checkout e painéis.
+- Backend: regras de negócio, assinaturas, permissões e validação dos pagamentos.
+- PostgreSQL: clientes, planos, assinaturas e transações.
+- Gateway de pagamento: processamento financeiro.
+- Webhooks: comunicação automática dos eventos de pagamento com o backend.
+- Serviço de notificações: e-mails sobre cadastro, pagamento, renovação e vencimento.
+
+O frontend nunca deve decidir sozinho que uma assinatura está paga. Essa decisão deve ser tomada pelo backend com base em uma confirmação confiável do provedor.
+
+## Para definir a melhor implementação do seu SaaS
+
+Há uma decisão importante: como você quer cobrar os clientes?
+
+1\. Modelo de cobrança
+
+Assinatura mensal e anual
+
+Somente mensal
+
+Mensal, anual e plano gratuito
+
+Pagamento único, sem renovação
+
+2\. Formas de pagamento
+
+Pix e cartão de crédito
+
+Pix, cartão e boleto
+
+Somente cartão, com cobrança recorrente
+
+3\. Quando o cliente cria a conta?
+
+Cria a conta antes de pagar
+
+Escolhe o plano e paga antes de concluir o cadastro
+
+Começa com teste grátis e paga depois
+
+Definir fluxo de contratação
+
+Com essas três escolhas, conseguimos definir o fluxo completo de contratação, desde o primeiro clique na Landing Page até o pagamento confirmado, a ativação automática do cliente e o acompanhamento financeiro pelo Super Admin.
+
+# Arquitetura completa de contratação, pagamentos e assinaturas do seu SaaS
+
+Vamos estruturar seu SaaS para que uma empresa possa conhecer a plataforma pela Landing Page, iniciar um teste grátis, utilizar o sistema, contratar um plano mensal pagando por Pix ou cartão e ter sua assinatura gerenciada automaticamente. Tudo isso será acompanhado pelo painel Super Admin, sem depender de cadastro ou liberação manual.
+
+A arquitetura será pensada para um SaaS empresarial multi-tenant, com isolamento de dados entre empresas, rastreabilidade financeira, controle de acesso e possibilidade de crescer sem precisar refazer toda a estrutura.
+
+## 1. Visão geral da arquitetura
+
+Landing Page e cadastro
+
+Planos, cadastro empresarial, teste grátis e login
+
+Backend — API central
+
+Autenticação, empresas, permissões, assinaturas e regras comerciais
+
+PostgreSQL
+
+Clientes, empresas, planos, cobranças e auditoria
+
+Autorização
+
+RBAC, isolamento por empresa e controle de acesso
+
+Provedor de pagamentos
+
+Pix, cartão, cobrança mensal, reembolsos e notificações via webhook
+
+Painel do cliente
+
+Uso do SaaS, assinatura e pagamentos
+
+Super Admin
+
+Gestão de empresas, assinaturas e financeiro
+
+### Stack recomendada
+
+| Camada                    | Tecnologia                                                      |
+| ------------------------- | --------------------------------------------------------------- |
+| Landing Page e interface  | React + TypeScript                                              |
+| Backend/API               | NestJS + TypeScript                                             |
+| Banco de dados            | PostgreSQL                                                      |
+| Acesso ao banco           | Prisma ORM ou alternativa equivalente                           |
+| Pagamentos                | Provedor com Pix, cartão e recursos compatíveis com assinaturas |
+| Filas e tarefas agendadas | Redis + BullMQ, quando necessário                               |
+| Documentação da API       | OpenAPI/Swagger                                                 |
+| Testes                    | Jest e testes de integração                                     |
+| Implantação               | Docker e ambiente de produção gerenciado                        |
+
+A Landing Page, o painel do cliente e o Super Admin podem compartilhar componentes visuais, mas as permissões e os dados devem ser validados pelo backend. Ocultar um botão no frontend não é uma medida de segurança suficiente.
+
+## 2. Fluxo completo do cliente: do teste grátis à assinatura paga
+
+Etapa 1 — Landing Page
+
+O visitante escolhe “Começar teste grátis”. A página explica a duração do teste, os recursos incluídos, as condições de contratação e como funciona a cobrança depois do período gratuito.
+
+Etapa 2 — Cadastro empresarial
+
+O responsável informa nome, e-mail, senha e dados básicos da empresa. O sistema verifica o e-mail e cria o usuário, a empresa e o vínculo de proprietário em uma única transação no banco.
+
+Etapa 3 — Ativação do teste
+
+O backend registra o início e o término do período gratuito. A empresa recebe acesso apenas aos recursos previstos no teste. Não há pagamento confirmado nem assinatura paga nesse momento.
+
+Etapa 4 — Escolha do plano mensal
+
+Antes do fim do teste, o cliente seleciona o plano e a forma de pagamento: Pix ou cartão. O backend calcula o preço a partir do plano cadastrado, nunca de um valor arbitrário enviado pelo navegador.
+
+Etapa 5 — Confirmação da cobrança
+
+O provedor processa o pagamento e notifica o backend. O sistema valida a autenticidade do webhook, verifica a transação e atualiza a assinatura de forma idempotente.
+
+Etapa 6 — Assinatura ativa
+
+Após a confirmação válida, o cliente passa a utilizar os recursos pagos. O painel mostra o plano, o período vigente, os pagamentos e a próxima cobrança, quando aplicável.
+
+### Como tratar o fim do teste grátis
+
+Minha sugestão inicial é permitir o teste sem exigir cartão no cadastro, para reduzir o atrito. Antes do término, o sistema envia avisos e oferece a contratação.
+
+- Cliente contratou e pagou: ativa a assinatura paga.
+- Cliente não contratou: encerra o acesso aos recursos pagos e mantém os dados conforme a política de retenção.
+- Cliente iniciou o Pix, mas não pagou: mantém a cobrança pendente; não ativa o plano pago.
+- Cliente cancelou a assinatura: registra o cancelamento e aplica a regra de acesso até o fim do período pago, conforme os termos.
+- Cliente está inadimplente: aplica uma política explícita de tolerância, aviso e eventual suspensão, sem apagar imediatamente seus dados.
+
+A duração do teste e o prazo de tolerância serão configurações do produto, não regras espalhadas pelo código.
+
+## 3. Decisão importante: Pix e cartão não devem ter exatamente o mesmo fluxo
+
+Para evitar problemas futuros, precisamos separar a modalidade de pagamento da situação da assinatura.
+
+- Cartão: o objetivo é permitir renovação mensal automática, com autorização adequada para cobranças recorrentes.
+- Pix: o cliente pode pagar cada mensalidade por um novo QR Code ou código de pagamento. A cobrança recorrente automática por Pix depende do produto contratado, da autorização do cliente e dos recursos efetivamente habilitados pelo provedor.
+
+O Mercado Pago documenta uma solução de assinaturas que inclui período de teste, periodicidade mensal e opções de pagamento como Pix e cartão. A disponibilidade exata do fluxo e da renovação para cada meio deve ser confirmada na integração escolhida.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://www.mercadopago.com.br\&sz=32)
+
+Mercado Pago Developers
+
++1
+
+
+
+Minha recomendação para a primeira versão é oferecer cartão com renovação automática e Pix com pagamento mensal iniciado pelo cliente, desde que essa seja a modalidade disponibilizada pelo provedor selecionado. Assim, você não promete uma renovação automática por Pix antes de confirmar que ela está disponível.
+
+Links oficiais para avaliar a integração:
+
+- [Mercado Pago — Assinaturas](https://www.mercadopago.com.br/developers/pt/docs/subscriptions/overview)
+- [Mercado Pago — Referência da API](https://www.mercadopago.com.br/developers/pt/reference)
+
+O provedor será integrado por um módulo próprio no backend. Isso permite trocar de provedor futuramente sem reescrever o cadastro, o controle de acesso ou o banco de assinaturas.
+
+## 4. Modelo de dados no PostgreSQL
+
+O banco deve separar identidade, empresa, plano contratado, assinatura e transações financeiras. Não recomendo guardar tudo em uma única tabela.
+
+### Tabelas centrais
+
+| Tabela           | Principais campos                                                       | Finalidade                            |
+| ---------------- | ----------------------------------------------------------------------- | ------------------------------------- |
+| `users`          | `id`, `email`, `password_hash`, `email_verified_at`                     | Identidade e autenticação             |
+| `tenants`        | `id`, `name`, `slug`, `status`                                          | Empresas clientes                     |
+| `tenant_members` | `tenant_id`, `user_id`, `role`                                          | Usuários e funções em cada empresa    |
+| `plans`          | `id`, `name`, `monthly_price`, `active`                                 | Catálogo de planos                    |
+| `plan_features`  | `plan_id`, `feature_key`, `limit_value`                                 | Recursos e limites de cada plano      |
+| `trials`         | `tenant_id`, `started_at`, `ends_at`, `status`                          | Controle do teste grátis              |
+| `subscriptions`  | `tenant_id`, `plan_id`, `status`, `trial_ends_at`, `current_period_end` | Ciclo de vida da assinatura           |
+| `payments`       | `subscription_id`, `amount`, `currency`, `method`, `status`             | Cobranças e pagamentos                |
+| `invoices`       | `subscription_id`, `period_start`, `period_end`, `due_at`, `status`     | Mensalidades e documentos de cobrança |
+| `payment_events` | `provider`, `event_id`, `received_at`, `processed_at`                   | Eventos recebidos do provedor         |
+| `audit_logs`     | `actor_user_id`, `tenant_id`, `action`, `created_at`                    | Histórico de ações relevantes         |
+
+Também incluiria estas tabelas de suporte:
+
+- `payment_customers`: identificador do cliente no provedor.
+- `payment_methods`: referência tokenizada do meio de pagamento, sem armazenar os dados completos do cartão.
+- `webhook_events`: eventos recebidos, com identificador único, estado do processamento e informações mínimas para auditoria.
+- `subscription_changes`: alterações de plano, cancelamentos e outras mudanças contratuais.
+- `notification_logs`: registro de avisos de vencimento, fim de teste e falhas de cobrança.
+- `idempotency_keys`: controle de operações que não podem ser executadas duas vezes acidentalmente.
+- `admin_audit_logs`: auditoria das ações realizadas por Super Admins, se quiser separar esses registros.
+
+### Relacionamentos
+
+users
+
+Pessoas que acessam o SaaS
+
+tenant_members
+
+Vínculo entre pessoa, empresa e função
+
+tenants
+
+Empresa contratante
+
+subscriptions
+
+Plano, período, teste e status
+
+invoices
+
+Mensalidades e vencimentos
+
+payments
+
+Tentativas e pagamentos
+
+A empresa é a unidade de isolamento do SaaS. Os funcionários de uma empresa podem ter funções diferentes, mas nenhum deles deve conseguir acessar dados de outra empresa simplesmente alterando um identificador na URL.
+
+### Regras importantes para o banco
+
+1. Cada empresa terá um identificador único `tenant_id` nos dados empresariais.
+2. As tabelas terão chaves estrangeiras e restrições de integridade.
+3. A combinação do provedor com o identificador externo do evento deverá ser única para evitar processamentos duplicados.
+4. Os valores financeiros serão armazenados em unidades monetárias exatas, como centavos inteiros ou um tipo decimal adequado — nunca em ponto flutuante.
+5. A assinatura guardará uma referência à versão ou às condições comerciais contratadas, para que mudanças futuras no preço não alterem indevidamente contratos existentes.
+
+Para PostgreSQL, eu consideraria também Row-Level Security (RLS) como camada adicional de proteção. Ela não substitui as verificações no backend, mas pode ajudar a impedir consultas acidentais entre empresas.
+
+## 5. Estados da assinatura e do pagamento
+
+Não use um único campo para representar tudo. Uma assinatura pode estar ativa enquanto uma fatura futura está pendente, por exemplo.
+
+### Estados da assinatura
+
+| Estado      | Significado                      |
+| ----------- | -------------------------------- |
+| `trialing`  | Em período de teste              |
+| `active`    | Assinatura paga e válida         |
+| `past_due`  | Existe uma cobrança vencida      |
+| `canceled`  | Cancelada                        |
+| `expired`   | Período de acesso encerrado      |
+| `suspended` | Acesso temporariamente bloqueado |
+
+### Estados do pagamento
+
+| Estado               | Significado                    |
+| -------------------- | ------------------------------ |
+| `pending`            | Aguardando conclusão           |
+| `processing`         | Em processamento               |
+| `paid`               | Pagamento confirmado           |
+| `failed`             | Pagamento recusado ou falhou   |
+| `expired`            | Cobrança expirou sem pagamento |
+| `refunded`           | Valor reembolsado              |
+| `partially_refunded` | Reembolso parcial              |
+
+Os estados definitivos devem ser mapeados a partir dos estados reais do provedor. Não se deve presumir que qualquer evento recebido representa um pagamento aprovado.
+
+## 6. Como os webhooks funcionarão
+
+O webhook é o mecanismo que permite ao provedor avisar seu backend quando algo acontece com uma cobrança.
+
+\#chatgpt-mermaid-\_r_1m6\_{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;fill:rgb(237, 237, 237);}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#chatgpt-mermaid-\_r_1m6\_ .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_1m6\_ .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_1m6\_ .error-icon{fill:rgb(48, 48, 48);}#chatgpt-mermaid-\_r_1m6\_ .error-text{fill:rgb(237, 237, 237);stroke:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_1m6\_ .edge-thickness-normal{stroke-width:1px;}#chatgpt-mermaid-\_r_1m6\_ .edge-thickness-thick{stroke-width:3.5px;}#chatgpt-mermaid-\_r_1m6\_ .edge-pattern-solid{stroke-dasharray:0;}#chatgpt-mermaid-\_r_1m6\_ .edge-thickness-invisible{stroke-width:0;fill:none;}#chatgpt-mermaid-\_r_1m6\_ .edge-pattern-dashed{stroke-dasharray:3;}#chatgpt-mermaid-\_r_1m6\_ .edge-pattern-dotted{stroke-dasharray:2;}#chatgpt-mermaid-\_r_1m6\_ .marker{fill:rgb(175, 175, 175);stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_1m6\_ .marker.cross{stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_1m6\_ svg{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;}#chatgpt-mermaid-\_r_1m6\_ p{margin:0;}#chatgpt-mermaid-\_r_1m6\_ .label{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_1m6\_ .cluster-label text{fill:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_1m6\_ .cluster-label span{color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_1m6\_ .cluster-label span p{background-color:transparent;}#chatgpt-mermaid-\_r_1m6\_ .label text,#chatgpt-mermaid-\_r_1m6\_ span{fill:rgb(237, 237, 237);color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_1m6\_ .node rect,#chatgpt-mermaid-\_r_1m6\_ .node circle,#chatgpt-mermaid-\_r_1m6\_ .node ellipse,#chatgpt-mermaid-\_r_1m6\_ .node polygon,#chatgpt-mermaid-\_r_1m6\_ .node path{fill:rgb(9, 23, 44);stroke:rgb(31, 78, 148);stroke-width:1px;}#chatgpt-mermaid-\_r_1m6\_ .rough-node .label text,#chatgpt-mermaid-\_r_1m6\_ .node .label text,#chatgpt-mermaid-\_r_1m6\_ .image-shape .label,#chatgpt-mermaid-\_r_1m6\_ .icon-shape .label{text-anchor:middle;}#chatgpt-mermaid-\_r_1m6\_ .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#chatgpt-mermaid-\_r_1m6\_ .rough-node .label,#chatgpt-mermaid-\_r_1m6\_ .node .label,#chatgpt-mermaid-\_r_1m6\_ .image-shape .label,#chatgpt-mermaid-\_r_1m6\_ .icon-shape .label{text-align:center;}#chatgpt-mermaid-\_r_1m6\_ .node.clickable{cursor:pointer;}#chatgpt-mermaid-\_r_1m6\_ .root .anchor path{fill:rgb(175, 175, 175)!important;stroke-width:0;stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_1m6\_ .arrowheadPath{fill:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_1m6\_ .edgePath .path{stroke:rgb(175, 175, 175);stroke-width:1px;}#chatgpt-mermaid-\_r_1m6\_ .flowchart-link{stroke:rgb(175, 175, 175);fill:none;}#chatgpt-mermaid-\_r_1m6\_ .edgeLabel{background-color:rgb(0, 0, 0);text-align:center;}#chatgpt-mermaid-\_r_1m6\_ .edgeLabel p{background-color:rgb(0, 0, 0);}#chatgpt-mermaid-\_r_1m6\_ .edgeLabel rect{opacity:0.5;background-color:rgb(0, 0, 0);fill:rgb(0, 0, 0);}#chatgpt-mermaid-\_r_1m6\_ .labelBkg{background-color:rgba(0, 0, 0, 0.5);}#chatgpt-mermaid-\_r_1m6\_ .cluster rect{fill:rgb(48, 48, 48);stroke:rgba(255, 255, 255, 0.15);stroke-width:1px;}#chatgpt-mermaid-\_r_1m6\_ .cluster text{fill:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_1m6\_ .cluster span{color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_1m6\_ div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:12px;background:rgb(48, 48, 48);border:1px solid rgba(255, 255, 255, 0.15);border-radius:2px;pointer-events:none;z-index:100;}#chatgpt-mermaid-\_r_1m6\_ .flowchartTitleText{text-anchor:middle;font-size:18px;fill:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_1m6\_ rect.text{fill:none;stroke-width:0;}#chatgpt-mermaid-\_r_1m6\_ .icon-shape,#chatgpt-mermaid-\_r_1m6\_ .image-shape{background-color:rgb(0, 0, 0);text-align:center;}#chatgpt-mermaid-\_r_1m6\_ .icon-shape p,#chatgpt-mermaid-\_r_1m6\_ .image-shape p{background-color:rgb(0, 0, 0);padding:2px;}#chatgpt-mermaid-\_r_1m6\_ .icon-shape .label rect,#chatgpt-mermaid-\_r_1m6\_ .image-shape .label rect{opacity:0.5;background-color:rgb(0, 0, 0);fill:rgb(0, 0, 0);}#chatgpt-mermaid-\_r_1m6\_ .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#chatgpt-mermaid-\_r_1m6\_ .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#chatgpt-mermaid-\_r_1m6\_ .node .neo-node{stroke:rgb(31, 78, 148);}#chatgpt-mermaid-\_r_1m6\_ [data-look="neo"].node rect,#chatgpt-mermaid-\_r_1m6\_ [data-look="neo"].cluster rect,#chatgpt-mermaid-\_r_1m6\_ [data-look="neo"].node polygon{stroke:url(#chatgpt-mermaid-\_r_1m6\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_1m6\_ [data-look="neo"].swimlane.cluster rect{filter:none;}#chatgpt-mermaid-\_r_1m6\_ [data-look="neo"].node path{stroke:url(#chatgpt-mermaid-\_r_1m6\_-gradient);stroke-width:1px;}#chatgpt-mermaid-\_r_1m6\_ [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_1m6\_ [data-look="neo"].node .neo-line path{stroke:rgb(31, 78, 148);filter:none;}#chatgpt-mermaid-\_r_1m6\_ [data-look="neo"].node circle{stroke:url(#chatgpt-mermaid-\_r_1m6\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_1m6\_ [data-look="neo"].node circle .state-start{fill:#000000;}#chatgpt-mermaid-\_r_1m6\_ [data-look="neo"].icon-shape .icon{fill:url(#chatgpt-mermaid-\_r_1m6\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_1m6\_ [data-look="neo"].icon-shape .icon-neo path{stroke:url(#chatgpt-mermaid-\_r_1m6\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_1m6\_ .node text{font-size:14px;font-weight:600;letter-spacing:normal;fill:rgb(153, 206, 255);}#chatgpt-mermaid-\_r_1m6\_ .edgeLabels text{font-size:13px;font-weight:600;letter-spacing:-0.08px;fill:rgb(153, 206, 255);}#chatgpt-mermaid-\_r_1m6\_ .node tspan[font-weight="normal"],#chatgpt-mermaid-\_r_1m6\_ .edgeLabels tspan[font-weight="normal"]{font-weight:600;}#chatgpt-mermaid-\_r_1m6\_ .edgeLabel .label rect{opacity:1;rx:13px;ry:13px;fill:rgb(0, 14, 26);stroke:rgb(26, 62, 95);stroke-width:1px;}#chatgpt-mermaid-\_r_1m6\_ .node rect,#chatgpt-mermaid-\_r_1m6\_ .node circle,#chatgpt-mermaid-\_r_1m6\_ .node ellipse,#chatgpt-mermaid-\_r_1m6\_ .node polygon,#chatgpt-mermaid-\_r_1m6\_ .node path{fill:rgb(0, 40, 77);stroke:rgba(255, 255, 255, 0.1);stroke-width:1px;}#chatgpt-mermaid-\_r_1m6\_ .node rect{rx:16px;ry:16px;}#chatgpt-mermaid-\_r_1m6\_ .node.mermaid-decision .label-container{fill:rgb(0, 14, 26);stroke:rgb(26, 62, 95);stroke-dasharray:2,2;}#chatgpt-mermaid-\_r_1m6\_ .edgePaths .flowchart-link{stroke:rgb(175, 175, 175);stroke-width:1px;stroke-linecap:round;stroke-linejoin:round;}#chatgpt-mermaid-\_r_1m6\_ .marker{fill:rgb(175, 175, 175);stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_1m6\_ :root{--mermaid-font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";}Cliente inicia pagamentoBackend cria cobrançaProvedor processa Pix oucartãoProvedor envia webhookValidar autenticidadeEvento válido?Rejeitar e registrarVerificar duplicidadeJá processado?Não repetir efeitosConsultar pagamento noprovedor se necessárioAtualizar pagamento e faturaAtualizar assinatura conformeas regrasRegistrar auditoria e notificarclienteNãoSimSimNão
+
+### O que precisa acontecer em cada webhook
+
+1. O backend recebe o evento em um endpoint HTTPS, por exemplo, `/api/v1/webhooks/payments`.
+2. Valida a assinatura ou o mecanismo de autenticidade documentado pelo provedor.
+3. Verifica se o evento já foi recebido e processado.
+4. Quando necessário, consulta a API do provedor para confirmar o estado real do pagamento.
+5. Atualiza os registros financeiros e a assinatura em uma transação de banco.
+6. Registra o resultado e agenda notificações.
+7. Retorna uma resposta adequada ao provedor.
+
+O endpoint deve responder rapidamente. Se houver processamento demorado, o backend pode registrar o evento em uma fila e processá-lo de forma assíncrona.
+
+Nunca libere o plano apenas porque o navegador retornou para uma página de sucesso. O redirecionamento pode acontecer antes de a confirmação chegar ou até mesmo ser simulado. O estado do pagamento deve ser confirmado de forma confiável pelo backend.
+
+## 7. Endpoints da API
+
+Eu organizaria a API por módulos, mantendo o prefixo `/api/v1`.
+
+| Endpoint                         | Função                          |
+| -------------------------------- | ------------------------------- |
+| `POST /auth/register`            | Criar conta e empresa           |
+| `POST /auth/login`               | Autenticar o usuário            |
+| `GET /public/plans`              | Listar planos públicos          |
+| `POST /trials/start`             | Iniciar o teste, se elegível    |
+| `GET /subscriptions/current`     | Consultar a assinatura atual    |
+| `POST /subscriptions/checkout`   | Iniciar a contratação           |
+| `POST /billing/invoices/:id/pay` | Iniciar pagamento de uma fatura |
+| `GET /billing/invoices`          | Listar mensalidades             |
+| `GET /billing/payments`          | Consultar pagamentos            |
+| `POST /subscriptions/cancel`     | Solicitar cancelamento          |
+| `POST /webhooks/payments`        | Receber eventos do provedor     |
+
+Os endpoints do Super Admin ficariam em um módulo separado, por exemplo, `/api/v1/admin/`.
+
+Exemplos:
+
+- `GET /admin/tenants` — listar empresas.
+- `GET /admin/subscriptions` — consultar assinaturas.
+- `GET /admin/payments` — consultar transações.
+- `POST /admin/tenants/:id/suspend` — suspender uma empresa, mediante permissão.
+- `POST /admin/subscriptions/:id/cancel` — cancelar uma assinatura, respeitando as regras e registrando a ação.
+
+Os endpoints administrativos precisam verificar uma permissão global de Super Admin. Ser membro ou proprietário de uma empresa não concede automaticamente privilégios administrativos globais.
+
+## 8. Como será o painel Super Admin
+
+[Subscription Management SaaS Dashboard (3) | Images :: Behance](https://images.openai.com/static-rsc-4/me5vf8432CBiqDiikwzB3x4qxayxCX-9GS8PzBgeldcJ4pfCLv9PdjYr8L8dUcBKJm2YRxk_oledysuLWiDYqs9dTo94_fMlw6aZGCnf4bMb1FLprG229Nt6IMMWiWlDt6Qm5T48tBFGgLPyLQTIyFy63nR76iRfnWX3OxAf8dE?purpose=inline)
+
+Dashboard financeiro
+
+Receita recorrente mensal, assinaturas ativas, testes em andamento, cancelamentos e cobranças pendentes.
+
+[SaaS Admin Dashboard for Multi-Tenant Platform UX/UI Design by Atiq Ahmad on Dribbble](https://images.openai.com/static-rsc-4/aYYc9piid7hOMUHTBWGtTae-V1KxVMSRXrhF139g4uJmPhfXS_hn6r5hhs8OM9Px95xt9qLakp-K9m-wUXW3_dqtKHNesjoTvPbXbmwtbPzvr43QAUOYAiWmSV_L_uCMrHhSI3s2Lxc_W2MIZX3bg_PW9VlPk9h1w3vuvcHKr5U?purpose=inline)
+
+Empresas e clientes
+
+Cadastro, responsável, data de entrada, estado da conta, plano e histórico de utilização.
+
+[Saaste - Saas Admin Dashboard Figma UI Template Kit by QuomodoTheme](https://images.openai.com/static-rsc-4/yzl9wBepHqbXJW-5VgGYckdR0dNdlN-aWYlptUhHHWjaEvsIZAM4455vFd2wphIdUYQ78sEnlG3TvlEadNVLUiD2hkgEvmPEP2x0H5eB1zJKkX31ApTbJXs-O8fJ7TVpDoH-5hn52vbxZs4OAwWu7vHj_ImqSn5tzR1vJopbK-c?purpose=inline)
+
+Assinaturas e cobranças
+
+Testes prestes a terminar, faturas, pagamentos confirmados, falhas, reembolsos e cancelamentos.
+
+O Super Admin deverá poder visualizar os dados financeiros e executar ações autorizadas, mas não terá acesso irrestrito às senhas, aos dados completos de cartões ou ao conteúdo privado das empresas.
+
+Toda ação sensível deverá registrar o administrador responsável, a data, o motivo e o objeto afetado. Quando apropriado, uma suspensão ou um ajuste manual exigirá uma justificativa.
+
+## 9. Segurança e isolamento multi-tenant
+
+Esta parte precisa estar presente desde a primeira versão.
+
+1. Autenticação segura: hash de senha com algoritmo apropriado, recuperação de conta protegida, verificação de e-mail e sessões revogáveis.
+2. Autorização no backend: verificar o usuário, a empresa, a função e a permissão em cada operação protegida.
+3. Isolamento dos dados: derivar o `tenant_id` do contexto autenticado e autorizado, não confiar no ID enviado pelo cliente.
+4. Proteção de pagamentos: manter chaves secretas apenas no servidor, usar HTTPS e nunca armazenar números completos de cartões ou códigos de segurança.
+5. Proteção da API: validação dos dados, limitação de requisições, proteção contra tentativas repetidas de login e controle de origem das chamadas.
+6. Webhooks seguros: validar autenticidade, evitar repetição de eventos e impedir dupla ativação ou dupla cobrança por reprocessamento.
+7. Auditoria e recuperação: backups testados, registros de ações administrativas e procedimentos de restauração.
+8. Privacidade: coletar somente os dados necessários, definir retenção e atender às obrigações aplicáveis da LGPD.
+
+O NestJS disponibiliza mecanismos de autenticação e limitação de requisições que podem ajudar nessa implementação.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://docs.nestjs.com\&sz=32)
+
+NestJS - A progressive Node.js framework
+
++1
+
+
+
+## 10. Como tratar o teste grátis sem abrir brechas
+
+O teste grátis precisa de regras explícitas no backend.
+
+- Registrar quando o teste começou e quando termina.
+- Definir se uma empresa pode receber apenas um teste.
+- Impedir que a alteração do relógio do navegador prolongue o teste.
+- Controlar a elegibilidade pelo backend e aplicar limites contra abuso.
+- Avisar o cliente antes do encerramento.
+- Ao terminar, bloquear as funções pagas sem apagar automaticamente os dados.
+- Quando o pagamento for confirmado, ativar a assinatura e registrar o início do período pago.
+
+Não basta esconder as telas quando o teste termina. Cada API que oferece um recurso pago precisa conferir se a empresa tem direito a utilizá-lo.
+
+## 11. Plano de implementação por etapas
+
+Eu desenvolveria o sistema nesta ordem, testando cada fase antes de avançar.
+
+Fase 1 — Fundação
+
+Projeto React, NestJS, PostgreSQL, migrations, configuração por ambiente e documentação da API.
+
+Fase 2 — Usuários e empresas
+
+Cadastro, login, verificação de e-mail, papéis, criação de empresas e testes de isolamento multi-tenant.
+
+Fase 3 — Planos e teste grátis
+
+Catálogo, limites por plano, início e fim do teste, regras de elegibilidade e notificações.
+
+Fase 4 — Pagamentos
+
+Integrar o provedor, checkout, Pix, cartão, faturas, webhooks, idempotência e ambiente de testes.
+
+Fase 5 — Painéis
+
+Landing Page, painel da empresa, gerenciamento da assinatura e Super Admin financeiro.
+
+Fase 6 — Validação e produção
+
+Testes de falhas, cobranças duplicadas, pagamentos pendentes, cancelamentos, segurança, backups e implantação.
+
+## 12. Critérios para considerar o sistema pronto
+
+Antes de publicar a contratação para clientes reais, eu exigiria testes que comprovem que:
+
+- Uma empresa não consegue consultar nem alterar dados de outra.
+- O teste grátis termina no horário definido pelo backend.
+- Um pagamento pendente não libera recursos pagos indevidamente.
+- Um webhook repetido não duplica pagamentos nem ativa a assinatura duas vezes.
+- Uma falha na cobrança mensal leva ao estado de inadimplência previsto na política.
+- O cancelamento impede renovações futuras conforme os termos contratados.
+- O Super Admin só consegue executar ações para as quais tem permissão.
+- As chaves do provedor não aparecem no frontend, nos logs nem no repositório.
+- Um backup pode ser restaurado com sucesso.
+
+## Minha recomendação final
+
+Para sua primeira versão, eu adotaria React + TypeScript, NestJS, PostgreSQL, um provedor de pagamentos com suporte comprovado a Pix e cartão e webhooks processados de forma idempotente. Começaria com teste grátis sem cartão, renovação automática por cartão e cobrança mensal por Pix mediante pagamento do cliente, ajustando o fluxo conforme os recursos disponíveis no provedor escolhido.
+
+A ordem é importante: primeiro construir a base de usuários, empresas e permissões; depois as assinaturas; só então integrar pagamentos reais. Isso reduz o risco de precisar refazer o banco e as regras de acesso no meio do desenvolvimento.

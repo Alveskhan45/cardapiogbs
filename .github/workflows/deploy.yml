@@ -1,0 +1,79 @@
+name: Cardápio SaaS — CI
+
+on:
+  push:
+    branches: [main, feature/**]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cardapio_saas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cardapio_saas"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      # papéis separados, como em produção: o app é sujeito a RLS
+      DATABASE_URL: postgresql://cardapio_app:cardapio_app@localhost:5432/cardapio_saas
+      SUPER_ADMIN_DATABASE_URL: postgresql://cardapio_admin:cardapio_admin@localhost:5432/cardapio_saas
+      JWT_SECRET: ci-secret-de-teste-nao-usar-em-producao
+      TENANT_RESOLVER: auto
+      WILDCARD_DOMAIN: localhost
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      # cria os papéis e concede CREATE no schema public (PG 15+)
+      - name: Preparar papéis do banco
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d cardapio_saas -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE cardapio_app LOGIN PASSWORD 'cardapio_app' NOSUPERUSER NOBYPASSRLS;
+          CREATE ROLE cardapio_admin LOGIN PASSWORD 'cardapio_admin' NOSUPERUSER BYPASSRLS CREATEDB;
+          GRANT ALL PRIVILEGES ON DATABASE cardapio_saas TO cardapio_app, cardapio_admin;
+          GRANT CREATE, USAGE ON SCHEMA public TO cardapio_app, cardapio_admin;
+          SQL
+
+      - name: Migrations
+        run: npm run migrate
+
+      # suíte de isolamento multi-tenant (Fase 10 do plano)
+      - name: Testes de isolamento
+        run: npm test
+
+      - name: Conferir sintaxe de todos os arquivos
+        run: |
+          find . -path ./node_modules -prune -o -name '*.js' -print0 | xargs -0 -n1 node --check
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build da imagem
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: cardapio-saas:${{ github.sha }}

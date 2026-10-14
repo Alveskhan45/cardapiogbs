@@ -1,0 +1,149 @@
+/* ==================== DASHBOARD ==================== */
+
+/* "Pendente" para o KPI é tudo que ainda não terminou: enquanto o pedido não
+   for entregue nem cancelado, ele continua em aberto (pendente, em preparo
+   ou em entrega). Antes só o status "pendente" contava e o número zerava
+   assim que a loja aceitava o pedido. */
+function pedidoAberto(o) {
+  const s = String((o && o.status) || '').toLowerCase().trim();
+  if (s === 'cancelada') return false;
+  if (s === 'concluido' || s === 'concluído' || s === 'finalizado') return false;
+  return s !== 'entregue' && s !== 'cancelado';
+}
+
+function renderDashboard() {
+  const valid = state.orders.filter(o => o.status !== 'cancelado');
+
+  // KPI: Vendas hoje
+  const today = localDay(Date.now());
+  const todayOrders = valid.filter(o => localDay(o.createdAt || Date.now()) === today);
+  const todayTotal = todayOrders.reduce((s,o) => s + o.total, 0);
+  const el1 = $('kpiHoje'); if (el1) el1.textContent = brl(todayTotal);
+  const el1s = $('kpiHojeSub'); if (el1s) el1s.textContent = todayOrders.length + ' pedido' + (todayOrders.length===1?'':'s');
+
+  // KPI: Pedidos em aberto (não entregues e não cancelados)
+  const pending = state.orders.filter(pedidoAberto).length;
+  const el2 = $('kpiPend'); if (el2) el2.textContent = pending;
+  const el2s = $('kpiPendSub'); if (el2s) el2s.textContent = pending > 0 ? 'em aberto' : 'tudo em ordem';
+
+  // KPI: Estoque baixo
+  const low = state.products.filter(p => p.active && p.stock <= state.config.minStock).length;
+  const el3 = $('kpiLow'); if (el3) el3.textContent = low;
+  const kpiLowCard = el3 ? el3.closest('.kpi') : null;
+  if (kpiLowCard) kpiLowCard.classList.toggle('danger', low > 0);
+
+  // KPI: Produtos
+  const active = state.products.filter(p => p.active).length;
+  const el4 = $('kpiProd'); if (el4) el4.textContent = active;
+  const el4s = $('kpiProdSub'); if (el4s) el4s.textContent = state.categories.length + ' categoria' + (state.categories.length===1?'':'s');
+
+  // Badges da sidebar
+  const sbProd = $('sbBadgeProd'); if (sbProd) sbProd.textContent = state.products.length;
+  const sbPed = $('sbBadgePed');
+  if (sbPed) {
+    sbPed.textContent = pending;
+    /* Vermelho pulsando só quando tem serviço em aberto — em zero o badge
+       fica neutro em vez de continuar gritando. */
+    sbPed.classList.toggle('sb-badge-alert', pending > 0);
+  }
+
+  // Gráfico
+  renderChart();
+
+  // Top produtos
+  const counts = {};
+  valid.forEach(o => o.items.forEach(i => counts[i.name] = (counts[i.name]||0) + i.qty));
+  const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const elTop = $('dashTop');
+  if (elTop) {
+    elTop.innerHTML = top.length
+      ? top.map(([n,q],i) => `
+          <div class="dash-item">
+            <span><b>${i+1}º</b> ${esc(n)}</span>
+            <b>${q} un</b>
+          </div>`).join('')
+      : '<div class="dash-empty">Sem vendas ainda</div>';
+  }
+
+  // Alertas de estoque
+  const alertas = state.products
+    .filter(p => p.active && p.stock <= state.config.minStock)
+    .sort((a,b) => a.stock - b.stock)
+    .slice(0,5);
+  const elAl = $('dashAlertas');
+  if (elAl) {
+    elAl.innerHTML = alertas.length
+      ? alertas.map(p => `
+          <div class="dash-item">
+            <span>${p.image && (p.image.startsWith('http')||p.image.startsWith('assets/')) ? '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7.5A2.5 2.5 0 0 1 7.5 5h9A2.5 2.5 0 0 1 19 7.5v9A2.5 2.5 0 0 1 16.5 19h-9A2.5 2.5 0 0 1 5 16.5v-9Z" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 15.5l2.5-3 2.3 2.6 2.7-3.5 3 4.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8.5h10v7H7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 11.5h6M9 14h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>'} ${esc(p.name)}</span>
+            <b style="color:${p.stock===0?'var(--danger)':'var(--warning)'}">${p.stock === 0 ? 'esgotado' : p.stock + ' un'}</b>
+          </div>`).join('')
+      : '<div class="dash-empty"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 9.5 17 19 7.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Estoque em dia</div>';
+  }
+
+  // Últimos pedidos
+  const recent = state.orders.slice(0, 5);
+  const elRec = $('dashUltimos');
+  if (elRec) {
+    elRec.innerHTML = recent.length
+      ? recent.map(o => `
+          <div class="dash-item">
+            <span>#${esc(o.id)} — ${esc(o.customer)}</span>
+            <b>${brl(o.total)}</b>
+          </div>`).join('')
+      : '<div class="dash-empty">Sem pedidos</div>';
+  }
+
+  // Botões "ver tudo"
+  const b1 = $('dashGoEstoque'); if (b1) b1.onclick = () => switchAdminTab('estoque');
+  const b2 = $('dashGoPed'); if (b2) b2.onclick = () => switchAdminTab('ped');
+}
+
+function renderChart() {
+  const el = $('chartVendas');
+  if (!el) return;
+
+  // Últimos 7 dias
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push({
+      iso: localDay(d),
+      label: d.toLocaleDateString('pt-BR', { weekday: 'short' }).slice(0,3)
+    });
+  }
+
+  const valid = state.orders.filter(o => o.status !== 'cancelado');
+  const totals = days.map(d => {
+    return valid
+      .filter(o => localDay(o.createdAt || Date.now()) === d.iso)
+      .reduce((s,o) => s + o.total, 0);
+  });
+  const max = Math.max(...totals, 1);
+  const sum = totals.reduce((a,b) => a+b, 0);
+
+  const tag = $('dashTotal7');
+  if (tag) tag.textContent = brl(sum);
+
+  // Estado vazio
+  if (sum <= 0) {
+    el.innerHTML = '<div class="chart-empty"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 16.5V9M11 16.5V4.5M17 16.5v-7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg> Sem vendas nos últimos 7 dias</div>';
+  } else {
+    el.innerHTML = totals.map((v, i) => {
+      const h = Math.max(4, (v / max) * 100);
+      return `<div class="chart-bar" style="height:${h}%" title="${brl(v)}">
+        <span class="cval">${brl(v)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // Labels
+  let labelsEl = el.nextElementSibling;
+  if (!labelsEl || !labelsEl.classList.contains('chart-labels')) {
+    labelsEl = document.createElement('div');
+    labelsEl.className = 'chart-labels';
+    el.parentElement.appendChild(labelsEl);
+  }
+  labelsEl.innerHTML = days.map(d => `<span>${d.label}</span>`).join('');
+}

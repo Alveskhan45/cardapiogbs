@@ -1,0 +1,752 @@
+
+Todas as senhas foram redefinidas para admin123:
+
+Super Admin: admin@seusaas.com → senha admin123
+
+Lojas:
+- Loja Demonstração → demo@local.test
+- Loja Ativa → lojaativa@teste.com
+- Gostinho de Amor → gostinho@amor.com
+- Smoke Test Loja (x3) → 
+smoke1791567844624@teste.com, 
+smoke1791568084207@teste.com, 
+smoke1791568157705@teste.com
+
+Todas com senha admin123.
+
+================================================================================
+PLANO DE MIGRAÇÃO: SINGLE-TENANT → MULTI-TENANT (SAAS)
+Projeto: Cardápio Digital - Distribuidora de Bebidas
+Data: 2026-10-04
+================================================================================
+
+VISÃO GERAL
+-----------
+Transformar a aplicação atual (um banco, um admin, uma instância) em uma
+plataforma SaaS multi-tenant onde cada cliente (distribuidora) tem seus
+dados isolados, configurações próprias e acesso via subdomínio.
+
+ABORDAGEM ESCOLHIDA: Shared Database + Shared Schema (tenant_id em todas tabelas)
+- Menor risco, migração incremental, um deploy só
+- PostgreSQL recomendado para produção (SQLite só para dev)
+- Isolamento via middleware + queries com WHERE tenant_id
+
+
+================================================================================
+FASE 0: PREPARAÇÃO E INFRAESTRUTURA
+================================================================================
+
+0.1 Trocar SQLite → PostgreSQL (obrigatório para multi-tenant real)
+    - Instalar pg e pg-hstore
+    - Configurar connection pool no server.js
+    - Criar script de migração SQLite → Postgres
+    - Variáveis de ambiente: DATABASE_URL, PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE
+
+0.2 Configurar variáveis de ambiente (.env)
+    DATABASE_URL=postgresql://user:pass@host:5432/cardapio_saas
+    JWT_SECRET=chave-super-secreta-para-tokens
+    TENANT_RESOLVER=subdomain  # ou 'header' ou 'path'
+    WILDCARD_DOMAIN=seusaas.com
+    SUPER_ADMIN_EMAIL=admin@seusaas.com
+    SUPER_ADMIN_PASS=senha-forte-gerada
+
+0.3 Configurar DNS wildcard + SSL
+    *.seusaas.com → IP do servidor
+    Let's Encrypt wildcard certificate (certbot --manual --preferred-challenges dns)
+    Ou usar Cloudflare + SSL Full (Strict)
+
+0.4 Criar estrutura de pastas para isolamento de assets
+    /data/
+      /tenants/
+        /{tenantId}/
+          /produtos/     # imagens dos produtos
+          /backups/      # backups isolados
+          /exports/      # relatórios exportados
+    Ajustar multer para salvar em pasta do tenant
+
+
+================================================================================
+FASE 1: MODELO DE DADOS (BANCO)
+================================================================================
+
+1.1 Nova tabela: tenants
+    CREATE TABLE tenants (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name         VARCHAR(200) NOT NULL,
+      subdomain    VARCHAR(100) UNIQUE NOT NULL,  -- 'cliente1'
+      slug         VARCHAR(100) UNIQUE NOT NULL,  -- url-friendly
+      plan         VARCHAR(50) DEFAULT 'starter', -- starter, pro, enterprise
+      status       VARCHAR(20) DEFAULT 'active',  -- active, suspended, cancelled
+      settings     JSONB DEFAULT '{}',            -- configurações extras
+      created_at   TIMESTAMP DEFAULT NOW(),
+      updated_at   TIMESTAMP DEFAULT NOW(),
+      deleted_at   TIMESTAMP
+    );
+    CREATE INDEX idx_tenants_subdomain ON tenants(subdomain);
+    CREATE INDEX idx_tenants_status ON tenants(status);
+
+1.2 Nova tabela: users (substitui admin único)
+    CREATE TABLE users (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id     UUID REFERENCES tenants(id) ON DELETE CASCADE,
+      email         VARCHAR(255) NOT NULL,
+      password_hash VARCHAR(255) NOT NULL,
+      name          VARCHAR(200),
+      role          VARCHAR(50) DEFAULT 'admin',  -- admin, operator, viewer
+      permissions   JSONB DEFAULT '{}',
+      last_login    TIMESTAMP,
+      active        BOOLEAN DEFAULT true,
+      created_at    TIMESTAMP DEFAULT NOW(),
+      updated_at    TIMESTAMP DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX idx_users_tenant_email ON users(tenant_id, email) WHERE active;
+    CREATE INDEX idx_users_tenant ON users(tenant_id);
+
+1.3 Nova tabela: super_admins (acesso global)
+    CREATE TABLE super_admins (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email         VARCHAR(255) UNIQUE NOT NULL,
+      password_hash VARCHAR(255) NOT NULL,
+      name          VARCHAR(200),
+      active        BOOLEAN DEFAULT true,
+      created_at    TIMESTAMP DEFAULT NOW()
+    );
+
+1.4 Adicionar tenant_id em TODAS tabelas existentes:
+    
+    ALTER TABLE products ADD COLUMN tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE;
+    ALTER TABLE categories ADD COLUMN tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE;
+    ALTER TABLE orders ADD COLUMN tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE;
+    ALTER TABLE order_items ADD COLUMN tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE;
+    ALTER TABLE bairros ADD COLUMN tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE;
+    ALTER TABLE config ADD COLUMN tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE;
+    ALTER TABLE coupons ADD COLUMN tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE;
+    ALTER TABLE variations ADD COLUMN tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE;
+    ALTER TABLE extras ADD COLUMN tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE;
+    ALTER TABLE stock_movements ADD COLUMN tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE;
+    ALTER TABLE audit_logs ADD COLUMN tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE;
+    -- etc para todas as tabelas
+
+1.5 Índices compostos obrigatórios (performance):
+    CREATE INDEX idx_products_tenant ON products(tenant_id);
+    CREATE INDEX idx_products_tenant_active ON products(tenant_id, active);
+    CREATE INDEX idx_orders_tenant_status ON orders(tenant_id, status);
+    CREATE INDEX idx_orders_tenant_created ON orders(tenant_id, created_at DESC);
+    CREATE INDEX idx_bairros_tenant ON bairros(tenant_id);
+    CREATE INDEX idx_config_tenant ON config(tenant_id);
+
+1.6 Row Level Security (RLS) - PostgreSQL (opcional mas recomendado):
+    ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY products_tenant_isolation ON products
+      USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
+    -- Repetir para TODAS as tabelas multi-tenant
+    -- No código: SET LOCAL app.current_tenant_id = 'uuid-do-tenant' no início da transação
+
+
+================================================================================
+FASE 2: MIDDLEWARE DE RESOLUÇÃO DE TENANT
+================================================================================
+
+2.1 Criar middleware: middleware/tenantResolver.js
+    
+    // Extrai tenant_id do request
+    // Suporta: subdomain (cliente.seusaas.com), header (X-Tenant-ID), path (/t/cliente1/)
+    
+    function resolveTenant(req, res, next) {
+      let tenantIdentifier = null;
+      
+      if (process.env.TENANT_RESOLVER === 'subdomain') {
+        const host = req.get('host') || '';
+        // Remove porta se houver
+        const hostname = host.split(':')[0];
+        // Extrai subdomínio: cliente.seusaas.com → cliente
+        const parts = hostname.split('.');
+        if (parts.length >= 3) {
+          tenantIdentifier = parts[0];
+        }
+      } else if (process.env.TENANT_RESOLVER === 'header') {
+        tenantIdentifier = req.get('X-Tenant-ID');
+      } else if (process.env.TENANT_RESOLVER === 'path') {
+        const match = req.path.match(/^\/t\/([^\/]+)/);
+        if (match) tenantIdentifier = match[1];
+      }
+      
+      if (!tenantIdentifier) {
+        // Permitir acesso sem tenant para rotas públicas (landing, login super-admin)
+        if (isPublicRoute(req.path)) return next();
+        return res.status(400).json({ error: 'Tenant não identificado' });
+      }
+      
+      // Buscar tenant no banco (com cache Redis em produção)
+      db.get('SELECT id, name, subdomain, status, plan FROM tenants WHERE subdomain = ? AND status = "active"', 
+        [tenantIdentifier], (err, tenant) => {
+        if (err) return res.status(500).json({ error: 'Erro ao resolver tenant' });
+        if (!tenant) return res.status(404).json({ error: 'Tenant não encontrado ou inativo' });
+        
+        req.tenant = tenant;
+        req.tenantId = tenant.id;
+        
+        // Para RLS: definir variável de sessão
+        if (process.env.USE_RLS === 'true') {
+          db.run('SET LOCAL app.current_tenant_id = ?', [tenant.id]);
+        }
+        
+        next();
+      });
+    }
+
+2.2 Aplicar middleware em TODAS as rotas da API (exceto públicas):
+    app.use('/api/', tenantResolver);
+    app.use('/admin/', tenantResolver);  // painel admin do tenant
+    
+    Rotas públicas (sem tenant):
+    - GET / (landing page)
+    - GET /api/public/tenant/:subdomain (verificar se tenant existe)
+    - POST /api/super-admin/login
+    - GET /health
+
+2.3 Helper para queries automáticas com tenant_id:
+    
+    // db/tenantQuery.js
+    function withTenant(tenantId, sql, params = []) {
+      // Detecta se é SELECT/INSERT/UPDATE/DELETE e injeta tenant_id
+      // SELECT: adiciona WHERE tenant_id = ?
+      // INSERT: adiciona tenant_id na lista de colunas/valores
+      // UPDATE/DELETE: adiciona AND tenant_id = ? no WHERE
+    }
+    
+    // Ou usar query builder (Knex, Kysely) com .where('tenant_id', tenantId) automático
+
+
+================================================================================
+FASE 3: AUTENTICAÇÃO E AUTORIZAÇÃO
+================================================================================
+
+3.1 Sistema de login por tenant (substitui admin-login.js atual)
+    - POST /api/auth/login { email, password }
+    - Valida usuário na tabela users COM tenant_id do middleware
+    - Gera JWT com claims: { sub: userId, tenantId, role, permissions }
+    - Refresh token rotation
+    
+    - GET /api/auth/me → retorna user + tenant + permissions
+    - POST /api/auth/refresh
+    - POST /api/auth/logout (blacklist refresh token)
+
+3.2 Super Admin (plataforma)
+    - Login separado: POST /api/super-admin/login
+    - JWT com claim: { superAdmin: true }
+    - Pode acessar qualquer tenant via header X-Tenant-ID ou seletor no dashboard
+
+3.3 Middleware de autorização:
+    
+    function requireAuth(req, res, next) {
+      const auth = req.headers.authorization;
+      if (!auth?.startsWith('Bearer ')) return res.status(401).json({ error: 'Token requerido' });
+      
+      try {
+        const decoded = jwt.verify(auth.slice(7), process.env.JWT_SECRET);
+        req.user = decoded;
+        // Verificar se token pertence ao tenant da request
+        if (!decoded.superAdmin && decoded.tenantId !== req.tenantId) {
+          return res.status(403).json({ error: 'Acesso negado a este tenant' });
+        }
+        next();
+      } catch (e) {
+        return res.status(401).json({ error: 'Token inválido ou expirado' });
+      }
+    }
+    
+    function requireRole(...roles) {
+      return (req, res, next) => {
+        if (!req.user) return res.status(401).json({ error: 'Não autenticado' });
+        if (req.user.superAdmin) return next();
+        if (!roles.includes(req.user.role)) return res.status(403).json({ error: 'Permissão insuficiente' });
+        next();
+      };
+    }
+
+3.4 Permissões granulares (opcional):
+    - users.permissions JSONB: { orders: ['read','write'], products: ['read'], reports: [] }
+    - Middleware: requirePermission('orders', 'write')
+
+
+================================================================================
+FASE 4: API - ADAPTAÇÃO DE TODOS OS ENDPOINTS
+================================================================================
+
+4.1 Padrão: TODAS as queries usam req.tenantId automaticamente
+
+    // ANTES
+    db.all('SELECT * FROM products WHERE active = 1');
+    
+    // DEPOIS
+    db.all('SELECT * FROM products WHERE active = 1 AND tenant_id = ?', [req.tenantId]);
+    
+    // OU com helper
+    db.all(withTenant(req.tenantId, 'SELECT * FROM products WHERE active = 1'));
+
+4.2 Endpoints que precisam ser atualizados (lista completa):
+
+    PRODUTOS:
+    GET    /api/products              → WHERE tenant_id = ?
+    GET    /api/products/:id          → WHERE id = ? AND tenant_id = ?
+    POST   /api/products              → INSERT ... tenant_id = ?
+    PUT    /api/products/:id          → UPDATE ... WHERE id = ? AND tenant_id = ?
+    DELETE /api/products/:id          → DELETE ... WHERE id = ? AND tenant_id = ?
+    
+    CATEGORIAS: (mesmo padrão)
+    BAIRROS: (mesmo padrão)
+    CUPONS: (mesmo padrão)
+    PEDIDOS:
+    GET    /api/orders                → WHERE tenant_id = ? + filtros
+    GET    /api/orders/:id            → WHERE id = ? AND tenant_id = ?
+    PUT    /api/orders/:id/status     → UPDATE ... WHERE id = ? AND tenant_id = ?
+    
+    CONFIGURAÇÕES:
+    GET    /api/config                → WHERE tenant_id = ? (single row por tenant)
+    PUT    /api/config                → UPSERT ... tenant_id = ?
+    
+    RELATÓRIOS:
+    GET    /api/reports/*             → WHERE tenant_id = ?
+    
+    UPLOAD DE IMAGENS:
+    POST   /api/upload                → Salvar em /data/tenants/{tenantId}/produtos/
+    GET    /assets/produtos/:file     → Verificar tenant_id do arquivo
+
+4.3 Validação de ownership em TODAS as operações sensíveis:
+    - Antes de UPDATE/DELETE: verificar se recurso pertence ao tenant
+    - Retornar 404 (não 403) para não vazar existência de dados de outros tenants
+
+
+================================================================================
+FASE 5: FRONTEND - ADAPTAÇÕES
+================================================================================
+
+5.1 Detecção de tenant no navegador:
+    
+    // js/tenant.js
+    function getCurrentTenant() {
+      const host = window.location.hostname;
+      if (host === 'localhost' || host === '127.0.0.1') {
+        // Dev: ler de localStorage ou query param ?tenant=cliente1
+        return localStorage.getItem('dev_tenant') || 'demo';
+      }
+      // Produção: extrair subdomínio
+      const parts = host.split('.');
+      return parts.length >= 3 ? parts[0] : null;
+    }
+    
+    // Injetar em todas as requests API
+    const originalFetch = window.fetch;
+    window.fetch = async (url, options = {}) => {
+      const tenant = getCurrentTenant();
+      if (tenant && url.startsWith('/api/')) {
+        options.headers = { ...options.headers, 'X-Tenant-ID': tenant };
+      }
+      return originalFetch(url, options);
+    };
+
+5.2 Login page (substitui admin-login.html):
+    - Campo: Email + Senha (sem campo tenant - vem do subdomínio)
+    - POST /api/auth/login
+    - Salvar JWT em httpOnly cookie ou localStorage
+    - Redirecionar para /admin/dashboard
+
+5.3 Admin Dashboard:
+    - Header mostra: "Painel - {tenant.name}" + botão trocar tenant (se super-admin)
+    - Todas as chamadas API já incluem tenant via middleware
+
+5.4 Cardápio público (cliente final):
+    - Acessa via cliente.seusaas.com
+    - GET /api/config → retorna config do tenant (tema, horário, frete, etc)
+    - GET /api/products → produtos do tenant
+    - Pedidos vão para /api/orders com tenant_id automático
+
+5.5 Assets (imagens):
+    - URLs: /assets/tenants/{tenantId}/produtos/arquivo.jpg
+    - Middleware serve static com verificação de tenant
+
+
+================================================================================
+FASE 6: PAINEL SUPER ADMIN (PLATAFORMA)
+================================================================================
+
+6.1 Rotas exclusivas super-admin (prefixo /api/super-admin):
+    GET    /api/super-admin/tenants           # Lista todos com paginação/filtros
+    GET    /api/super-admin/tenants/:id       # Detalhe completo
+    POST   /api/super-admin/tenants           # Criar novo tenant
+    PUT    /api/super-admin/tenants/:id       # Atualizar (plano, status, settings)
+    DELETE /api/super-admin/tenants/:id       # Soft delete (status = cancelled)
+    POST   /api/super-admin/tenants/:id/impersonate  # Gerar token para acessar como admin do tenant
+    
+    GET    /api/super-admin/stats             # Métricas globais: MRR, churn, tenants ativos, pedidos/dia
+    GET    /api/super-admin/revenue           # Faturamento por tenant/plano
+
+6.2 Interface Super Admin (nova seção no admin ou app separado):
+    - Tabela de tenants com: nome, subdomínio, plano, status, pedidos/mês, MRR, ações
+    - Modal "Novo Tenant": nome, subdomínio, plano, email admin inicial
+    - Onboarding automático: cria tenant + admin user + config padrão + dados demo
+    - Impersonate: "Entrar como admin" → abre painel do tenant em nova aba
+
+6.3 Provisionamento automático (onboarding):
+    
+    async function provisionTenant(data) {
+      const tenantId = uuid();
+      const tx = db.transaction();
+      
+      try {
+        // 1. Criar tenant
+        tx.run('INSERT INTO tenants (id, name, subdomain, plan) VALUES (?, ?, ?, ?)',
+          [tenantId, data.name, data.subdomain, data.plan || 'starter']);
+        
+        // 2. Criar admin user
+        const passHash = await hashPassword(data.adminPassword || generatePassword());
+        tx.run('INSERT INTO users (tenant_id, email, password_hash, name, role) VALUES (?, ?, ?, ?, "admin")',
+          [tenantId, data.adminEmail, passHash, data.adminName]);
+        
+        // 3. Config padrão
+        tx.run(`INSERT INTO config (tenant_id, store_name, delivery_time, min_order, 
+                  payments, frete_mode, theme_primary) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [tenantId, data.name, '30-45 min', 0, JSON.stringify(['Pix','Dinheiro','Cartão na entrega']),
+           'bairro', '#d90429']);
+        
+        // 4. Dados demo (opcional): categorias, produtos, bairros exemplo
+        await seedDemoData(tx, tenantId);
+        
+        // 5. Criar pasta assets
+        fs.mkdirSync(path.join(DATA_DIR, 'tenants', tenantId, 'produtos'), { recursive: true });
+        
+        tx.commit();
+        return { tenantId, adminPassword: data.adminPassword || generatedPass };
+      } catch (e) {
+        tx.rollback();
+        throw e;
+      }
+    }
+
+
+================================================================================
+FASE 7: CONFIGURAÇÕES POR TENANT
+================================================================================
+
+7.1 Tabela config passa a ter uma linha por tenant (tenant_id UNIQUE)
+    - store_name, hero_title, hero_subtitle
+    - delivery_time, min_order, block_when_closed
+    - payments (JSON array), frete_mode, frete_valor, frete_gratis_acima
+    - theme_primary, theme_shape, banner_url
+    - whatsapp_number, whatsapp_message
+    - horário funcionamento (JSON: dias + intervalos)
+    - pix_key, pix_merchant_name, pix_merchant_city
+
+7.2 Endpoint GET /api/config (público - para cardápio)
+    - Lê config do tenant via middleware
+    - Retorna apenas campos públicos (sem chaves sensíveis)
+
+7.3 Endpoint PUT /api/config (admin do tenant)
+    - Valida campos permitidos
+    - Atualiza config do tenant
+
+
+================================================================================
+FASE 8: ISOLAMENTO DE ARQUIVOS E ASSETS
+================================================================================
+
+8.1 Multer configurado por tenant:
+    
+    const tenantStorage = multer.diskStorage({
+      destination: (req, file, cb) => {
+        const tenantId = req.tenantId;
+        const dir = path.join(DATA_DIR, 'tenants', tenantId, 'produtos');
+        fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+      },
+      filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        cb(null, `${uuid()}${ext}`);
+      }
+    });
+
+8.2 Servir arquivos com verificação:
+    
+    app.get('/assets/tenants/:tenantId/produtos/:file', (req, res) => {
+      // Se request tem tenant (middleware), verificar se req.tenantId === req.params.tenantId
+      // Se super-admin, permitir
+      // Se público (cardápio), permitir leitura
+      const filePath = path.join(DATA_DIR, 'tenants', req.params.tenantId, 'produtos', req.params.file);
+      res.sendFile(filePath);
+    });
+
+8.3 Backup/Restore por tenant:
+    - POST /api/admin/backup → gera .sql ou .json só do tenant
+    - POST /api/admin/restore → restaura só do tenant (validar ownership)
+
+
+================================================================================
+FASE 9: PLANOS E LIMITES (QUOTAS)
+================================================================================
+
+9.1 Tabela plans (configurável):
+    CREATE TABLE plans (
+      id          VARCHAR(50) PRIMARY KEY,  -- 'starter', 'pro', 'enterprise'
+      name        VARCHAR(100),
+      price_monthly DECIMAL(10,2),
+      limits      JSONB NOT NULL,  -- { products: 100, orders_month: 1000, users: 2, bairros: 10, storage_mb: 100 }
+      features    JSONB NOT NULL   -- { api_access: false, custom_domain: false, white_label: false }
+    );
+
+9.2 Middleware de verificação de limites:
+    
+    async function checkLimit(tenantId, resource, action = 'create') {
+      const tenant = await db.get('SELECT plan FROM tenants WHERE id = ?', [tenantId]);
+      const plan = await db.get('SELECT limits FROM plans WHERE id = ?', [tenant.plan]);
+      const limit = plan.limits[resource];
+      
+      if (limit === -1) return { allowed: true }; // ilimitado
+      
+      const current = await db.get(`SELECT COUNT(*) as c FROM ${resource} WHERE tenant_id = ?`, [tenantId]);
+      if (current.c >= limit) {
+        return { allowed: false, limit, current: current.c, upgradeUrl: '/pricing' };
+      }
+      return { allowed: true, limit, current: current.c, remaining: limit - current.c };
+    }
+    
+    // Usar em: POST /api/products, POST /api/bairros, POST /api/users, etc.
+
+9.3 Headers de resposta com info de quota:
+    X-RateLimit-Limit: 100
+    X-RateLimit-Remaining: 87
+    X-RateLimit-Resource: products
+
+
+================================================================================
+FASE 10: MIGRAÇÃO DE DADOS EXISTENTES
+================================================================================
+
+10.1 Script de migração (rodar uma vez):
+    
+    // 1. Criar tenant "legacy" para dados atuais
+    const legacyTenantId = uuid();
+    
+    // 2. Inserir tenant
+    INSERT INTO tenants (id, name, subdomain, plan, status, created_at)
+    VALUES (?, 'Cliente Legado', 'legado', 'enterprise', 'active', NOW());
+    
+    // 3. Criar admin user para o legado
+    INSERT INTO users (tenant_id, email, password_hash, name, role, active)
+    VALUES (?, 'admin@atual.com', ?, 'Admin Legado', 'admin', 1);
+    
+    // 4. Atualizar TODAS as tabelas existentes com tenant_id
+    UPDATE products SET tenant_id = ? WHERE tenant_id IS NULL;
+    UPDATE categories SET tenant_id = ? WHERE tenant_id IS NULL;
+    UPDATE orders SET tenant_id = ? WHERE tenant_id IS NULL;
+    UPDATE bairros SET tenant_id = ? WHERE tenant_id IS NULL;
+    UPDATE config SET tenant_id = ? WHERE tenant_id IS NULL;
+    -- ... todas as tabelas
+    
+    // 5. Mover assets para pasta do tenant
+    // cp -r data/assets/produtos/* data/tenants/{legacyTenantId}/produtos/
+    
+    // 6. Criar índices (já definidos na Fase 1)
+
+10.2 Validar migração:
+    - Contar registros por tenant_id
+    - Testar login com admin legado
+    - Testar cardápio público
+    - Testar painel admin
+    - Testar pedidos
+
+
+================================================================================
+FASE 10: TESTES E VALIDAÇÃO
+================================================================================
+
+10.1 Testes de isolamento (CRÍTICOS):
+    [ ] Tenant A não vê produtos do Tenant B
+    [ ] Tenant A não vê pedidos do Tenant B
+    [ ] Tenant A não acessa config do Tenant B
+    [ ] Upload de imagem do Tenant A não acessível pelo Tenant B
+    [ ] Super-admin vê todos, tenant-admin vê só seu
+    [ ] Queries SQL sem tenant_id falham (RLS) ou retornam vazio
+
+10.2 Testes de performance:
+    [ ] Índices compostos funcionando (EXPLAIN ANALYZE)
+    [ ] Cache de tenant (Redis) reduz queries
+    [ ] Connection pool adequado
+
+10.3 Testes de onboarding:
+    [ ] Criar tenant via Super Admin → funciona em < 5s
+    [ ] Admin recebe email com credenciais
+    [ ] Subdomínio responde imediatamente
+    [ ] Dados demo carregados corretamente
+
+10.4 Testes de limites:
+    [ ] Bloqueio ao atingir limite de produtos
+    [ ] Upgrade de plano libera limites
+    [ ] Downgrade bloqueia se já excedeu
+
+
+================================================================================
+FASE 11: OBSERVABILIDADE E OPERAÇÃO
+================================================================================
+
+11.1 Logs estruturados com tenant_id:
+    logger.info('Order created', { tenantId: req.tenantId, orderId, userId: req.user.sub });
+
+11.2 Métricas por tenant (Prometheus/Grafana):
+    - orders_total{tenant="uuid"}
+    - revenue_total{tenant="uuid"}
+    - api_latency_p95{tenant="uuid"}
+    - active_users{tenant="uuid"}
+
+11.3 Alertas:
+    - Tenant inativo > 30 dias
+    - Erro 5xx > 1% por tenant
+    - Quota > 90% (avisar para upgrade)
+
+11.4 Backup automatizado por tenant:
+    - pg_dump --table=* --where="tenant_id='uuid'" (diário)
+    - Retenção: 30 dias (starter), 90 dias (pro), 1 ano (enterprise)
+    - Restore point-in-time por tenant
+
+
+================================================================================
+FASE 12: DEPLOY E ESCALABILIDADE
+================================================================================
+
+12.1 Dockerfile multi-stage:
+    - Build: node:20-alpine → npm ci → build
+    - Runtime: node:20-alpine → copy dist → user non-root
+
+12.2 Docker Compose (dev):
+    services:
+      app:
+        build: .
+        environment:
+          - DATABASE_URL=postgresql://postgres:pass@db:5432/cardapio
+          - TENANT_RESOLVER=subdomain
+        ports: ["3001:3001"]
+        depends_on: [db, redis]
+      db:
+        image: postgres:16
+        volumes: [pgdata:/var/lib/postgresql/data]
+      redis:
+        image: redis:7-alpine
+
+12.3 Produção (Kubernetes / ECS / Railway / Render):
+    - Horizontal pod autoscaling baseado em CPU/memória
+    - Redis para cache de tenant + sessões + rate limiting
+    - CDN para assets (Cloudflare, CloudFront)
+    - Managed PostgreSQL (RDS, Cloud SQL, Neon, Supabase)
+
+12.4 CI/CD Pipeline:
+    - Testes unitários + integração (isolamento de tenant)
+    - Migrações automáticas (golang-migrate ou similar)
+    - Deploy blue-green ou rolling
+    - Health check: /health verifica DB + Redis
+
+
+================================================================================
+CHECKLIST RESUMIDO POR ARQUIVO
+================================================================================
+
+ARQUIVOS NOVOS:
+[ ] middleware/tenantResolver.js
+[ ] middleware/auth.js
+[ ] middleware/quotas.js
+[ ] db/tenantQuery.js (helper)
+[ ] routes/super-admin.js
+[ ] routes/auth.js
+[ ] routes/tenants.js
+[ ] services/provisioning.js
+[ ] services/billing.js (futuro)
+[ ] js/tenant.js (frontend)
+[ ] pages/super-admin.html (ou React/Vue app)
+
+ARQUIVOS MODIFICADOS:
+[ ] server.js → add middleware, pg pool, super-admin routes
+[ ] package.json → add pg, jsonwebtoken, bcrypt, uuid, helmet, cors, compression
+[ ] db/schema.sql → todas migrations acima
+[ ] js/admin-login.js → novo fluxo auth por tenant
+[ ] js/admin-dashboard.js → header com tenant name, seletor (super-admin)
+[ ] js/app.js → detecção de tenant no frontend
+[ ] js/checkout.js → usa config do tenant
+[ ] js/menu.js → carrega produtos do tenant
+[ ] js/cart.js → envia tenant_id implícito
+[ ] css/style.css → variáveis de tema vindas do config do tenant
+[ ] index.html → remove admin login hardcoded, adicionar tenant detection
+
+ARQUIVOS DE INFRA:
+[ ] .env.example
+[ ] docker-compose.yml
+[ ] Dockerfile
+[ ] nginx.conf (reverse proxy + SSL)
+[ ] github-actions/deploy.yml
+[ ] migrations/ (pasta com arquivos .sql numerados)
+
+
+================================================================================
+CRONOGRAMA SUGERIDO (ESTIMATIVA)
+================================================================================
+
+Semana 1-2: Fases 0-1 (Infra + Banco)
+  - Postgres, migração dados, tenant_id em tabelas, índices, RLS
+
+Semana 3: Fase 2-3 (Middleware + Auth)
+  - Tenant resolver, JWT auth, super-admin, roles
+
+Semana 4: Fase 4 (API)
+  - Atualizar todos endpoints com tenant_id
+  - Testes de isolamento
+
+Semana 5: Fase 5-6 (Frontend + Super Admin)
+  - Login por tenant, dashboard super-admin, provisionamento
+
+Semana 6: Fase 7-9 (Config + Assets + Quotas)
+  - Config por tenant, upload isolado, planos/limites
+
+Semana 7: Fase 10-11 (Migração + Observabilidade)
+  - Script migração legado, logs, métricas, alertas
+
+Semana 8: Fase 12 + Testes finais
+  - Deploy, CI/CD, testes carga, documentação
+
+TOTAL: ~8 semanas (1 dev full-time) ou ~4 semanas (2 devs)
+
+
+================================================================================
+RISCOS E MITIGAÇÕES
+================================================================================
+
+RISCO: Vazamento de dados entre tenants
+MITIGAÇÃO: RLS no Postgres + testes automatizados de isolamento + code review obrigatório
+
+RISCO: Performance degradada com muitos tenants
+MITIGAÇÃO: Índices compostos, cache Redis (tenant config, user), connection pooling, read replicas
+
+RISCO: Migração de dados legado falha
+MITIGAÇÃO: Script testado em staging, backup completo antes, rollback plan, feature flag para ativar multi-tenant
+
+RISCO: Complexidade de deploy (wildcard DNS, SSL)
+MITIGAÇÃO: Automatizar com Terraform/Ansible, usar managed services (Vercel, Railway, Cloudflare)
+
+RISCO: Onboarding manual não escala
+MITIGAÇÃO: Provisionamento 100% automatizado, self-service signup futuro
+
+
+================================================================================
+PRÓXIMOS PASSOS IMEDIATOS (SE QUISER COMEÇAR AGORA)
+================================================================================
+
+1. Criar branch: git checkout -b feature/multi-tenant
+2. Adicionar pg e dependências: npm i pg jsonwebtoken bcrypt uuid
+3. Criar schema SQL (Fase 1) em migrations/001_multi_tenant.sql
+4. Configurar Postgres local (docker run postgres:16)
+5. Rodar migração e validar com dados atuais
+6. Implementar tenantResolver middleware
+7. Testar com 2 tenants locais (cliente1.localhost, cliente2.localhost via /etc/hosts)
+8. Commit a cada fase concluída
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================

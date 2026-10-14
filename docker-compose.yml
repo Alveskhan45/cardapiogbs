@@ -1,0 +1,24 @@
+services:
+  db:
+    image: postgres:16
+    container_name: cardapio_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cardapio_saas
+    ports:
+      # 5432 no host pode estar ocupado por um Postgres local (Windows) —
+      # use 5433 para não brigar com serviço nativo.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations/000_init_roles.sql:/docker-entrypoint-initdb.d/000_init_roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cardapio_saas"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:

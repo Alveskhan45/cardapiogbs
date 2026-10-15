@@ -11,7 +11,7 @@
    Subdomínios em produção: cliente.seusaas.com
    Dev local: http://localhost:3001?tenant=legado
    ============================================================ */
-try { process.loadEnvFile && process.loadEnvFile(); } catch (e) { /* .env é opcional */ }
+try { process.loadEnvFile && process.loadEnvFile(); } catch { /* .env é opcional */ }
 
 const express = require('express');
 const crypto = require('crypto');
@@ -26,6 +26,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('./db');
 const tq = require('./db/tenantQuery');
 const logger = require('./lib/logger');
+const metrics = require('./lib/metrics');
 const { hashPass, verifyPass } = require('./lib/passwords');
 const { defaultConfig } = require('./lib/seed');
 const { tenantResolver, invalidateTenantCache } = require('./middleware/tenantResolver');
@@ -90,7 +91,7 @@ const corsOptions = {
   origin(origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
     let parsed;
-    try { parsed = new URL(origin); } catch (e) { return callback(null, false); }
+    try { parsed = new URL(origin); } catch { return callback(null, false); }
     const base = String(process.env.WILDCARD_DOMAIN || '').trim().toLowerCase();
     const isLocalhost = base === 'localhost' || base.includes('127.0.0.1');
     const isTenantOrigin = !!base &&
@@ -105,11 +106,9 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-token']
 };
 
-const DATA_DIR = path.join(__dirname, 'data');
 fs.mkdirSync(path.join(TENANTS_DIR), { recursive: true });
 
 /* ------------------- Helpers ------------------- */
-const uid = () => '_' + crypto.randomBytes(6).toString('base64url');
 const brl = v => 'R$ ' + (Number(v) || 0).toFixed(2).replace('.', ',');
 
 function makeTrackCode(data) {
@@ -314,7 +313,7 @@ function broadcast(tenantId, event, data) {
   if (!room || !room.size) return;
   const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const client of room) {
-    try { client.write(msg); } catch (e) { room.delete(client); }
+    try { client.write(msg); } catch { room.delete(client); }
   }
 }
 
@@ -335,7 +334,7 @@ app.use(helmet({
     useDefaults: true,
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+      scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "https://fonts.googleapis.com"],
       imgSrc: ["'self'", "data:", "blob:"],
@@ -346,6 +345,7 @@ app.use(helmet({
       objectSrc: ["'none'"]
     }
   },
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
   crossOriginResourcePolicy: { policy: 'same-site' },
   frameguard: { action: 'deny' },
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
@@ -361,7 +361,15 @@ app.use(helmet({
 app.use(cors(corsOptions));
 app.options(/^(.*)$/, cors(corsOptions));
 app.use(compression());
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({
+  limit: '2mb',
+  // Webhooks de pagamento validam assinatura sobre o corpo cru, que o
+  // express.json() consumiria. O `verify` roda antes do parse e guarda a
+  // string original.
+  verify: (req, _res, buf) => {
+    req.rawBody = buf.toString('utf8');
+  }
+}));
 
 /* Nada aqui pode ficar em cache de navegador/proxy: cardápio, painel e
    pedidos mudam o tempo todo e mostrar versão velha é pior que recarregar. */
@@ -376,7 +384,15 @@ app.use((req, res, next) => {
   req.requestId = String(req.get('x-request-id') || crypto.randomUUID()).slice(0, 128);
   res.setHeader('x-request-id', req.requestId);
   const startedAt = Date.now();
-  res.on('finish', () => logger.request(req, res, startedAt));
+  res.on('finish', () => {
+    logger.request(req, res, startedAt);
+    metrics.observe({
+      status: res.statusCode,
+      route: `${req.method} ${(req.originalUrl || req.path).split('?')[0]}`,
+      duration_ms: Date.now() - startedAt,
+      error: res.statusCode >= 500
+    });
+  });
   next();
 });
 
@@ -422,6 +438,10 @@ const serveStatic = express.static(__dirname, { index: false, fallthrough: true 
    /api/super-admin/* e /api/public/tenant/:subdomain dispensam tenant. */
 app.use('/api', tenantResolver);
 
+/* Rate limiting global para todas as rotas /api */
+const { apiLimiter } = require('./middleware/rateLimit');
+app.use('/api', apiLimiter);
+
 /* Middleware: verifica status do tenant após resolver
    - pending_approval: permite acesso apenas a rotas específicas (login admin, etc.)
    - trial expirado: bloqueia acesso
@@ -457,7 +477,6 @@ app.use('/api', (req, res, next) => {
   if (tenant.status === 'pending_approval') {
     // Permite acesso ao painel admin para o dono ver status
     // Bloqueia cardápio público e APIs de pedido
-    const isAdminRoute = path.startsWith('/auth/') || path.startsWith('/admin/');
     const isPublicMenu = path === '/public' || path.startsWith('/public/');
     
     if (isPublicMenu) {
@@ -491,7 +510,7 @@ app.get('/assets/tenants/:tenantId/produtos/:file', async (req, res) => {
       [tenantId]
     );
     if (!t.rows.length) return res.status(404).send('Não encontrado');
-  } catch (e) {
+  } catch {
     return res.status(500).send('Erro ao verificar tenant');
   }
 
@@ -517,6 +536,8 @@ app.use((req, res, next) => {
 });
 
 /* ------------------- Rotas de tenant (admin e cardápio) ------------------- */
+/* ------------------- Rotas públicas (webhooks, health, etc.) ------------------- */
+app.use('/api/webhooks', require('./routes/webhooks'));
 app.use('/api/auth', authRoutes);
 app.use('/api/super-admin', superAdminRoutes);
 
@@ -572,7 +593,7 @@ app.get('/api/public/tenant/:subdomain', limitPublicReads('tenant-info', 120, 60
       }
     });
   } catch (e) {
-    console.error('[public.tenant]', e.message);
+    logger.routeError(req, '/api/public/tenant/:subdomain', e);
     res.status(500).json({ ok: false, error: 'Erro ao buscar loja' });
   }
 });
@@ -586,7 +607,7 @@ app.get('/api/public/plans', limitPublicReads('public-plans', 120, 60 * 1000), a
     try {
       const t = await db.runSuper('SELECT support_whatsapp FROM saas_templates WHERE id = $1', ['default']);
       supportWhatsapp = (t.rows[0] && t.rows[0].support_whatsapp) || '';
-    } catch (e) { /* campo ainda não migrado: ignora */ }
+    } catch { /* campo ainda não migrado: ignora */ }
     res.json({
       ok: true,
       support_whatsapp: supportWhatsapp,
@@ -597,7 +618,7 @@ app.get('/api/public/plans', limitPublicReads('public-plans', 120, 60 * 1000), a
       }))
     });
   } catch (e) {
-    console.error('[public.plans]', e.message);
+    logger.routeError(req, '/api/public/plans', e);
     res.status(500).json({ ok: false, error: 'Erro ao listar planos' });
   }
 });
@@ -620,7 +641,7 @@ app.post('/api/public/leads', limitPublicReads('public-lead', 20, 60 * 1000), as
     );
     res.status(201).json({ ok: true, id: r.rows[0].id });
   } catch (e) {
-    console.error('[public.leads]', e.message);
+    logger.routeError(req, '/api/public/leads', e);
     res.status(500).json({ ok: false, error: 'Erro ao registrar contato' });
   }
 });
@@ -646,7 +667,7 @@ app.post('/api/public/signup', limitPublicReads('public-signup', 5, 60 * 60 * 10
     if (e.code === '23505') {
       return res.status(409).json({ ok: false, error: 'Subdomínio ou e-mail já existe' });
     }
-    console.error('[public.signup]', e.message);
+    logger.routeError(req, '/api/public/signup', e);
     res.status(500).json({ ok: false, error: 'Erro ao criar a sua conta' });
   }
 });
@@ -664,7 +685,7 @@ app.get('/api/public/contract/:token', async (req, res) => {
       supportWhatsapp: pix.whatsapp
     });
   } catch (e) {
-    console.error('[public.contract]', e.message);
+    logger.routeError(req, '/api/public/contract', e);
     res.status(500).json({ ok: false, error: 'Erro ao consultar a contratação' });
   }
 });
@@ -683,7 +704,7 @@ app.post('/api/public/contract/:token/confirm', limitPublicReads('public-contrac
     if (e.code === 'CONTRACT_NOT_FOUND') {
       return res.status(404).json({ ok: false, error: e.message });
     }
-    console.error('[public.contract.confirm]', e.message);
+    logger.routeError(req, '/api/public/contract/:token/confirm', e);
     res.status(500).json({ ok: false, error: 'Erro ao informar o pagamento' });
   }
 });
@@ -693,16 +714,12 @@ app.get('/api/health', async (req, res) => {
   let dbOk = true;
   try {
     await db.ping();
-  } catch (e) {
+  } catch {
     dbOk = false;
   }
   const health = {
     ok: dbOk,
-    db: dbOk ? 'up' : 'down',
-    uptime_s: Number((process.uptime() || 0).toFixed(2)),
-    memory_rss_mb: Number(((process.memoryUsage().rss || 0) / 1024 / 1024).toFixed(2)),
-    node_version: process.version,
-    time: Date.now()
+    db: dbOk ? 'up' : 'down'
   };
   res.status(dbOk ? 200 : 503).json(health);
 });
@@ -776,7 +793,7 @@ app.get('/api/events', (req, res) => {
   room.add(res);
 
   const heartbeat = setInterval(() => {
-    try { res.write(': ping\n\n'); } catch (e) { /* fecha no onerror */ }
+    try { res.write(': ping\n\n'); } catch { /* fecha no onerror */ }
   }, 25000);
 
   req.on('close', () => {
@@ -796,30 +813,22 @@ app.post('/api/login', async (req, res) => {
     return res.status(429).json({ ok: false, error: 'Muitas tentativas. Aguarde alguns minutos.' });
   }
 
-  const email = String((req.body && req.body.email) || '').trim();
+  const email = String((req.body && req.body.email) || '').trim().toLowerCase();
   const password = String((req.body && req.body.password) || '');
+  if (!email) {
+    return res.status(400).json({ ok: false, error: 'Informe o e-mail' });
+  }
   if (!password) {
     return res.status(400).json({ ok: false, error: 'Informe a senha' });
   }
 
   try {
-    // Sem e-mail: aceita quando a loja tem UM único admin ativo — é a compatibilidade
-    // com o painel antigo, que pedia apenas a senha.
-    let user = null;
-    if (email) {
-      const u = await db.runTenant(req.tenantId,
-        `SELECT id, email, password_hash, name, role, permissions FROM users
-         WHERE tenant_id = $1 AND lower(email) = lower($2) AND active`,
-        [req.tenantId, email]
-      );
-      user = u.rows[0] || null;
-    } else {
-      const todos = await db.runTenant(req.tenantId,
-        'SELECT id, email, password_hash, name, role, permissions FROM users WHERE tenant_id = $1 AND active ORDER BY created_at',
-        [req.tenantId]
-      );
-      if (todos.rows.length === 1) user = todos.rows[0];
-    }
+    const u = await db.runTenant(req.tenantId,
+      `SELECT id, email, password_hash, name, role, permissions FROM users
+       WHERE tenant_id = $1 AND lower(email) = lower($2) AND active`,
+      [req.tenantId, email]
+    );
+    const user = u.rows[0] || null;
     if (!user || !verifyPass(password, user.password_hash)) {
       return res.status(401).json({ ok: false, error: 'E-mail ou senha incorretos' });
     }
@@ -836,7 +845,7 @@ app.post('/api/login', async (req, res) => {
       state: adminState(data)
     });
   } catch (e) {
-    console.error('[login]', e.message);
+    logger.routeError(req, '/api/login', e);
     res.status(500).json({ ok: false, error: 'Erro ao autenticar' });
   }
 });
@@ -853,7 +862,7 @@ app.get('/api/admin/state', requireAuth, async (req, res) => {
     quotas.quotaHeaders(res, 'products', info);
     res.json({ ok: true, state: adminState(data), quota: { products: info } });
   } catch (e) {
-    console.error('[admin.state]', e.message);
+    logger.routeError(req, '/api/admin/state', e);
     res.status(500).json({ ok: false, error: 'Erro ao carregar dados' });
   }
 });
@@ -898,7 +907,7 @@ app.put('/api/admin/state', requireAuth, requireRole('admin', 'operator'), async
     broadcast(req.tenantId, 'sync', { t: Date.now() });
     res.json({ ok: true });
   } catch (e) {
-    console.error('[admin.save]', e.message);
+    logger.routeError(req, '/api/admin/state (PUT)', e);
     res.status(500).json({ ok: false, error: 'Erro ao salvar dados' });
   }
 });
@@ -923,7 +932,7 @@ app.post('/api/admin/password', requireAuth, async (req, res) => {
     broadcast(req.tenantId, 'sync', { t: Date.now() });
     res.json({ ok: true });
   } catch (e) {
-    console.error('[admin.password]', e.message);
+    logger.routeError(req, '/api/admin/password', e);
     res.status(500).json({ ok: false, error: 'Erro ao trocar senha' });
   }
 });
@@ -960,7 +969,7 @@ app.post('/api/admin/upload', requireAuth, requireRole('admin', 'operator'), (re
       } catch (cleanupError) {
         logger.error('upload_cleanup_failed', { message: cleanupError.message, tenantId: req.tenantId });
       }
-      console.error('[admin.upload]', e.message);
+      logger.routeError(req, '/api/admin/upload', e);
       res.status(500).json({ ok: false, error: 'Erro ao salvar imagem' });
     }
   });
@@ -976,7 +985,7 @@ app.get('/api/public', limitPublicReads('public-menu', 120, 60 * 1000), async (r
       tenant: { name: req.tenant.name, subdomain: req.tenant.subdomain, plan: req.tenant.plan }
     });
   } catch (e) {
-    console.error('[public]', e.message);
+    logger.routeError(req, '/api/public', e);
     res.status(500).json({ ok: false, error: 'Erro ao carregar cardápio' });
   }
 });
@@ -988,7 +997,7 @@ app.get('/api/orders/:id', limitPublicReads('order-status', 60, 60 * 1000), asyn
     const o = data.orders.find(x => String(x.id) === String(req.params.id));
     if (!o) return res.status(404).json({ ok: false, error: 'Pedido não encontrado' });
     res.json({ ok: true, status: o.status });
-  } catch (e) {
+  } catch {
     res.status(500).json({ ok: false, error: 'Erro ao buscar pedido' });
   }
 });
@@ -1003,7 +1012,7 @@ app.post('/api/orders', async (req, res) => {
   let data;
   try {
     data = await getTenantState(req.tenantId);
-  } catch (e) {
+  } catch {
     return res.status(500).json({ ok: false, error: 'Erro ao carregar dados da loja' });
   }
   try {
@@ -1011,7 +1020,7 @@ app.post('/api/orders', async (req, res) => {
     quotas.quotaHeaders(res, 'orders_month', orderQuota);
     if (!orderQuota.allowed) return quotas.quotaError(res, 'orders_month', orderQuota);
   } catch (e) {
-    console.error('[orders.quota]', e.message);
+    logger.routeError(req, '/api/orders', e);
     return res.status(500).json({ ok: false, error: 'Erro ao verificar limite de pedidos' });
   }
   const cfg = data.config;
@@ -1157,7 +1166,7 @@ app.post('/api/orders', async (req, res) => {
   try {
     await persistTenantState(req.tenantId, data);
   } catch (e) {
-    console.error('[orders.save]', e.message);
+    logger.routeError(req, '/api/orders (PUT)', e);
     return res.status(500).json({ ok: false, error: 'Erro ao salvar pedido' });
   }
 
@@ -1198,7 +1207,7 @@ app.get('/api/orders/:id/wa', limitPublicReads('order-whatsapp', 60, 60 * 1000),
     if (o.trackCode) m += `\n\n🔎 *Acompanhe:* ${base}/acompanhar?c=${o.trackCode}`;
     const url = `https://wa.me/${cfg.whatsapp}?text=${encodeURIComponent(m)}`;
     res.redirect(url);
-  } catch (e) {
+  } catch {
     res.status(500).json({ ok: false, error: 'Erro ao gerar link' });
   }
 });
@@ -1218,7 +1227,7 @@ app.get('/api/track/:code', limitPublicReads('order-track', 60, 60 * 1000), asyn
         total: o.total, trackCode: o.trackCode
       }
     });
-  } catch (e) {
+  } catch {
     res.status(500).json({ ok: false, error: 'Erro ao buscar pedido' });
   }
 });
@@ -1264,7 +1273,7 @@ async function init() {
   try {
     await runMigrations();
   } catch (e) {
-    throw new Error('Falha nas migrations: ' + e.message);
+    throw new Error('Falha nas migrations: ' + e.message, { cause: e });
   }
 
   await db.ping();
@@ -1284,7 +1293,10 @@ async function init() {
       }
     }
   } catch (e) {
-    console.error('[boot] super-admin:', e.message);
+    logger.error('super_admin_bootstrap_failed', {
+      email: String(process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase(),
+      message: e.message
+    });
   }
 
   const tenants = await db.runSuper('SELECT COUNT(*)::int AS c FROM tenants WHERE deleted_at IS NULL');
@@ -1303,13 +1315,30 @@ async function start() {
     process.exitCode = 1;
   });
 
+  /* Shutdown gracioso: loga a saída e fecha os pools do Postgres.
+     Sem isso o container reinicia sem deixar rastro do motivo. */
+  let shuttingDown = false;
+  for (const signal of ['SIGTERM', 'SIGINT']) {
+    process.on(signal, () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      logger.info('server_shutting_down', { signal, runtime: metrics.snapshot() });
+      db.close()
+        .then(() => process.exit(0))
+        .catch(() => process.exit(0));
+      // se o banco não fechar em 5s, sai mesmo assim
+      setTimeout(() => process.exit(0), 5000).unref();
+    });
+  }
+
   return app.listen(PORT, () => {
     logger.info('server_started', {
       port: PORT,
       env: process.env.NODE_ENV || 'development',
       tenant_resolver: process.env.TENANT_RESOLVER || 'auto',
       dev_tenant_url: `http://localhost:${PORT}/?tenant=legado`,
-      super_admin_url: `http://localhost:${PORT}/pages/super-admin.html`
+      super_admin_url: `http://localhost:${PORT}/pages/super-admin.html`,
+      log_level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug')
     });
   });
 }

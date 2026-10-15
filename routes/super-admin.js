@@ -19,11 +19,13 @@ const express = require('express');
 const db = require('../db');
 const { verifyPass, hashPass, validatePasswordStrength } = require('../lib/passwords');
 const { requireAuth, requireSuperAdmin, signSuperToken, issueImpersonationToken } = require('../middleware/auth');
-const { provisionTenant, provisioningError, validate: validateProvisioning } = require('../services/provisioning');
+const { provisionTenant, validate: validateProvisioning } = require('../services/provisioning');
 const billing = require('../services/billing');
 const contracting = require('../services/contracting');
 const { invalidateTenantCache } = require('../middleware/tenantResolver');
 const { superLoginLimiter, tenantCreateLimiter } = require('../middleware/rateLimit');
+const logger = require('../lib/logger');
+const metrics = require('../lib/metrics');
 
 const router = express.Router();
 
@@ -518,12 +520,33 @@ router.post('/tenants/:id/impersonate', async (req, res) => {
   }
 });
 
+/* ------------------- métricas do processo (observabilidade) ------------------- */
+/* Escopo da instância: contadores em memória + percentis de latência.
+   Autenticado como o resto do painel (requireSuperAdmin acima). */
+router.get('/runtime', async (req, res) => {
+  try {
+    res.json({
+      ok: true,
+      runtime: metrics.snapshot(),
+      node: {
+        version: process.version,
+        uptime_s: Math.floor(process.uptime()),
+        memory_rss_mb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+        env: process.env.NODE_ENV || 'development'
+      }
+    });
+  } catch (e) {
+    logger.routeError(req, '/api/super-admin/runtime', e);
+    res.status(500).json({ ok: false, error: 'Erro ao coletar métricas' });
+  }
+});
+
 /* ------------------- métricas globais ------------------- */
 router.get('/stats', async (req, res) => {
   try {
     res.json({ ok: true, stats: await billing.platformStats() });
   } catch (e) {
-    console.error('[super.stats]', e.message);
+    logger.routeError(req, '/api/super-admin/stats', e);
     res.status(500).json({ ok: false, error: 'Erro ao calcular métricas' });
   }
 });
@@ -532,7 +555,7 @@ router.get('/revenue', async (req, res) => {
   try {
     res.json({ ok: true, revenue: await billing.revenueByTenant(), revenueByPlan: await billing.revenueByPlan(), mrr: await billing.mrr(), plans: await billing.listPlans() });
   } catch (e) {
-    console.error('[super.revenue]', e.message);
+    logger.routeError(req, '/api/super-admin/revenue', e);
     res.status(500).json({ ok: false, error: 'Erro ao calcular faturamento' });
   }
 });
@@ -733,15 +756,16 @@ router.post('/payments/:id/approve', async (req, res) => {
     // Se a loja veio da contratação self-service, ativa a assinatura e gera
     // o código de acesso que o admin entrega ao cliente.
     let accessCode = '';
+    const code = contracting.generateAccessCode();
     const subUpdate = await db.runSuper(
       `UPDATE subscriptions
-          SET status = 'active',
-              activated_at = COALESCE(activated_at, NOW()),
-              renews_at = COALESCE(renews_at, NOW()) + INTERVAL '30 days',
-              access_code = CASE WHEN access_code = '' THEN $1 ELSE access_code END
-        WHERE tenant_id = $1 AND status <> 'active'
-        RETURNING id, access_code`,
-      [contracting.generateAccessCode(), result.payment.tenant_id]
+           SET status = 'active',
+               activated_at = COALESCE(activated_at, NOW()),
+               renews_at = COALESCE(renews_at, NOW()) + INTERVAL '30 days',
+               access_code = CASE WHEN access_code = '' THEN $1 ELSE access_code END
+         WHERE tenant_id = $2 AND status <> 'active'
+         RETURNING id, access_code`,
+      [code, result.payment.tenant_id]
     );
     if (subUpdate.rows.length) {
       accessCode = subUpdate.rows[0].access_code || '';
@@ -835,7 +859,7 @@ router.post('/tenants/:id/password-reset', async (req, res) => {
     await db.runSuper('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hashPass(nova), u.rows[0].id]);
     await db.runSuper('UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL', [u.rows[0].id]);
     await audit(req, 'password_reset', id, { email: u.rows[0].email });
-    res.json({ ok: true, email: u.rows[0].email, novaSenha: nova, tenant: t.rows[0] });
+    res.json({ ok: true, email: u.rows[0].email, tenant: t.rows[0] });
   } catch (e) {
     console.error('[super.pwreset]', e.message);
     res.status(500).json({ ok: false, error: 'Erro ao redefinir senha' });

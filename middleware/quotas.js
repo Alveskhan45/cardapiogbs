@@ -135,17 +135,17 @@ async function tenantUsageMb(dir) {
   let total = 0;
   
   async function walk(p) {
-    let entries = [];
-    try { entries = await fs.readdir(p, { withFileTypes: true }); } catch (e) { return; }
+    let entries;
+    try { entries = await fs.readdir(p, { withFileTypes: true }); } catch { return; }
     for (const entry of entries) {
       const full = p + '/' + entry.name;
       if (entry.isDirectory()) {
         await walk(full);
       } else {
-        try { 
+        try {
           const stats = await fs.stat(full);
-          total += stats.size; 
-        } catch (e) {}
+          total += stats.size;
+        } catch { /* arquivo removido entre o readdir e o stat: ignora */ }
       }
     }
   }

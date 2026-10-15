@@ -193,7 +193,7 @@ router.post('/logout', async (req, res) => {
   if (jti && req.tenantId) {
     try {
       await db.runTenant(req.tenantId, 'UPDATE refresh_tokens SET revoked_at = NOW() WHERE jti = $1 AND tenant_id = $2', [jti, req.tenantId]);
-    } catch (e) { /* revogar é melhor-esforço: o access token expira sozinho */ }
+    } catch { /* revogar é melhor-esforço: o access token expira sozinho */ }
   }
   res.json({ ok: true });
 });
@@ -398,6 +398,19 @@ router.delete('/users/:id', requireAuth, requireRole('admin'), async (req, res) 
   } catch (e) {
     console.error('[auth.deleteUser]', e.message);
     res.status(500).json({ ok: false, error: 'Erro ao remover usuário' });
+  }
+});
+
+/* ------------------- Portal de cobrança (Stripe/Asaas) ------------------- */
+router.get('/billing/portal', requireAuth, async (req, res) => {
+  if (req.superAdmin) return res.status(400).json({ ok: false, error: 'Use o painel da plataforma' });
+  if (req.user.role !== 'admin') return res.status(403).json({ ok: false, code: 'ROLE_REQUIRED', error: 'Somente admin pode acessar o portal de cobrança' });
+  try {
+    const { url } = await require('../services/payment').createCustomerPortal(req);
+    res.json({ ok: true, url });
+  } catch (e) {
+    console.error('[auth.billingPortal]', e.message);
+    res.status(500).json({ ok: false, error: 'Erro ao abrir portal de cobrança' });
   }
 });
 

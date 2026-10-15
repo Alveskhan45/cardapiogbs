@@ -10,8 +10,7 @@
    ============================================================ */
 'use strict';
 
-const path = require('path');
-try { process.loadEnvFile && process.loadEnvFile(); } catch (e) { /* .env é opcional */ }
+try { process.loadEnvFile && process.loadEnvFile(); } catch { /* .env é opcional */ }
 
 /* ---------- banco de testes separado ---------- */
 const SUPER_URL = process.env.SUPER_ADMIN_DATABASE_URL || process.env.DATABASE_URL;
@@ -71,7 +70,7 @@ async function req(method, p, o = {}) {
   if (o.auth) headers['Authorization'] = 'Bearer ' + o.auth;
   const r = await fetch(BASE + p, { method, headers, body: o.body ? JSON.stringify(o.body) : undefined });
   let d = null;
-  try { d = await r.json(); } catch (e) {}
+  try { d = await r.json(); } catch { /* corpo sem JSON: segue com null */ }
   return { s: r.status, d, h: r.headers };
 }
 
@@ -132,7 +131,9 @@ async function main() {
     const t0 = Date.now();
     r = await req('POST', '/api/super-admin/tenants', {
       auth: st,
-      body: { name: 'Loja Alfa', subdomain: 'alfa', plan: 'starter', adminEmail: 'alfa@teste.com', adminPassword: 'alfa1234', demo: true }
+      // status active explicitamente: plano pago nasce pending_approval
+      // (regra atual) e a suíte precisa da loja publicável desde o início
+      body: { name: 'Loja Alfa', subdomain: 'alfa', plan: 'starter', status: 'active', adminEmail: 'alfa@teste.com', adminPassword: 'alfa1234', demo: true }
     });
     check('criar tenant alfa', r.s === 201 && !!r.d.tenant, 'status ' + r.s + ' ' + JSON.stringify(r.d));
     check('provisioning devolveu senha do admin', typeof r.d.adminPassword === 'string' && r.d.adminPassword.length > 0);
@@ -141,7 +142,7 @@ async function main() {
 
     r = await req('POST', '/api/super-admin/tenants', {
       auth: st,
-      body: { name: 'Loja Beta', subdomain: 'beta', plan: 'starter', adminEmail: 'beta@teste.com', adminPassword: 'beta1234', demo: false }
+      body: { name: 'Loja Beta', subdomain: 'beta', plan: 'starter', status: 'active', adminEmail: 'beta@teste.com', adminPassword: 'beta1234', demo: false }
     });
     check('criar tenant beta', r.s === 201, 'status ' + r.s);
     const betaId = r.d.tenant && r.d.tenant.id;
@@ -196,8 +197,11 @@ async function main() {
     const betaToken = r.d.token;
     const betaRefresh = r.d.refreshToken;
 
-    r = await req('POST', '/api/auth/login', { tenant: 'alfa', body: { email: 'alfa@teste.com', password: 'errada' } });
-    check('senha errada é rejeitada', r.s === 401, 'status ' + r.s);
+    r = await req('POST', '/api/auth/login', { tenant: 'alfa', body: { email: 'alfa@teste.com', password: 'errada123' } });
+    check('senha errada é rejeitada (401)', r.s === 401, 'status ' + r.s);
+
+    r = await req('POST', '/api/auth/login', { tenant: 'alfa', body: { email: 'alfa@teste.com', password: 'curta' } });
+    check('senha com menos de 8 caracteres é recusada na entrada (400)', r.s === 400, 'status ' + r.s);
 
     r = await req('POST', '/api/auth/login', { tenant: 'alfa', body: { email: 'beta@teste.com', password: 'beta1234' } });
     check('e-mail de outro tenant não autentica', r.s === 401, 'status ' + r.s);
@@ -419,7 +423,8 @@ async function main() {
 
     r = await req('POST', '/api/auth/users', {
       tenant: 'beta', token: betaToken,
-      body: { email: 'op@beta.com', name: 'Operador', role: 'operator', password: 'op1234' }
+      // senha forte: a criação de usuários valida força (8+, maiúscula, minúscula, número)
+      body: { email: 'op@beta.com', name: 'Operador', role: 'operator', password: 'Operador1234' }
     });
     check('criar usuário operador', r.s === 201, 'status ' + r.s);
     const operatorId = r.d.user.id;
@@ -445,7 +450,7 @@ async function main() {
     });
     check('limite de 2 usuários do starter bloqueia o 3º', r.s === 403 && r.d.code === 'QUOTA_EXCEEDED', 'status ' + r.s);
 
-    r = await req('POST', '/api/auth/login', { tenant: 'beta', body: { email: 'op@beta.com', password: 'op1234' } });
+    r = await req('POST', '/api/auth/login', { tenant: 'beta', body: { email: 'op@beta.com', password: 'Operador1234' } });
     check('operador consegue entrar', r.s === 200, 'status ' + r.s);
     const opToken = r.d.token;
     r = await req('POST', '/api/auth/payment-proof', {
@@ -605,7 +610,7 @@ async function main() {
     }
     const menuThrottled = menuResponses.find(response => response.status === 429);
     check('consultas públicas excessivas são limitadas', !!menuThrottled, 'nenhuma resposta 429');
-    check('resposta de limite informa espera', !!menuThrottled && Number(menuThrottled.headers.get('retry-after')) === 60, menuThrottled && menuThrottled.headers.get('retry-after'));
+    check('resposta de limite informa espera (janela de 60s, abatendo o já corrido)', !!menuThrottled && Number(menuThrottled.headers.get('retry-after')) > 50 && Number(menuThrottled.headers.get('retry-after')) <= 60, menuThrottled && menuThrottled.headers.get('retry-after'));
     await Promise.all(menuResponses.map(response => response.body && response.body.cancel()));
   } finally {
     http.closeAllConnections && http.closeAllConnections();

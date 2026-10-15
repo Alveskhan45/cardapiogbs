@@ -11,9 +11,18 @@
     "db:down": "docker compose down",
     "migrate": "node scripts/migrate.js",
     "migrate:legacy": "node scripts/migrate-legacy.js",
-    "db:backup": "node scripts/backup-db.js",
+    "db:backup": "node scripts/backup.js",
+    "backup": "node scripts/backup.js",
+    "backup:verify": "node scripts/verify-backup.js",
+    "restore": "node scripts/restore.js",
     "prod:check": "node scripts/check-production.js",
-    "test": "node scripts/test-isolation.js"
+    "lint": "eslint server.js js/ middleware/ routes/ services/ db/ lib/ tests/",
+    "typecheck": "tsc --noEmit",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:ci": "jest --coverage --ci --runInBand",
+    "test:isolation": "node scripts/test-isolation.js"
   },
   "engines": {
     "node": ">=18"
@@ -29,6 +38,21 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
     "pg": "^8.23.1",
+    "stripe": "^23.0.0",
     "uuid": "^14.0.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^8.0.7",
+    "@babel/preset-env": "^8.0.7",
+    "@eslint/js": "^10.0.1",
+    "@types/express": "^5.0.6",
+    "@types/pg": "^8.23.1",
+    "babel-jest": "^30.5.2",
+    "eslint": "^10.12.0",
+    "eslint-plugin-no-unsanitized": "^4.1.5",
+    "eslint-plugin-security": "^4.2.0",
+    "jest": "^30.5.2",
+    "supertest": "^7.3.1",
+    "typescript": "^7.0.2"
   }
 }

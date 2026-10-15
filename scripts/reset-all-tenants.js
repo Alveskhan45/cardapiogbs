@@ -7,7 +7,7 @@
 
 'use strict';
 
-try { process.loadEnvFile && process.loadEnvFile(); } catch (e) {}
+try { process.loadEnvFile && process.loadEnvFile(); } catch { /* .env é opcional */ }
 
 const { Pool } = require('pg');
 

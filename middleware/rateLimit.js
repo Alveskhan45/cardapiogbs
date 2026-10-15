@@ -33,7 +33,6 @@ function createStore() {
   return {
     async increment(key, windowMs) {
       const now = Date.now();
-      const windowSec = Math.ceil(windowMs / 1000);
       const pipeline = redis.pipeline();
       pipeline.incr(key);
       pipeline.pexpire(key, windowMs);
@@ -83,38 +82,47 @@ function createRateLimiter(options = {}) {
   });
 }
 
+/* O express-rate-limit exige ipKeyGenerator(req.ip) em keyGenerator
+   próprio: usado direto, req.ip casaria por /64 em IPv6 — o atacante
+   troca de endereço dentro da mesma subrede e zera o contador. */
+const loginKey = (req) => `login:${req.tenantId || 'global'}:${ipKeyGenerator(req.ip)}`;
+const superLoginKey = (req) => `superlogin:${ipKeyGenerator(req.ip)}`;
+const tenantCreateKey = (req) => `tenant-create:${req.user?.sub || ipKeyGenerator(req.ip)}`;
+const apiKey = (req) => `api:${req.tenantId || 'global'}:${ipKeyGenerator(req.ip)}`;
+const paymentProofKey = (req) => `payment-proof:${req.tenantId}:${ipKeyGenerator(req.ip)}`;
+
 const loginLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 10,
-  keyGenerator: (req) => `login:${req.tenantId || 'global'}:${req.ip}`,
+  keyGenerator: loginKey,
   message: { ok: false, error: 'Muitas tentativas de login. Aguarde 15 minutos.' }
 });
 
 const superLoginLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 10,
-  keyGenerator: (req) => `superlogin:${req.ip}`,
+  keyGenerator: superLoginKey,
   message: { ok: false, error: 'Muitas tentativas. Aguarde alguns minutos.' }
 });
 
 const tenantCreateLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000,
   max: 10,
-  keyGenerator: (req) => `tenant-create:${req.user?.sub || req.ip}`,
+  keyGenerator: tenantCreateKey,
   message: { ok: false, error: 'Muitas lojas criadas em pouco tempo. Tente novamente mais tarde.' }
 });
 
 const apiLimiter = createRateLimiter({
   windowMs: 60 * 1000,
   max: 60,
-  keyGenerator: (req) => `api:${req.tenantId || 'global'}:${req.ip}`,
+  keyGenerator: apiKey,
   message: { ok: false, error: 'Limite de requisições excedido. Aguarde um momento.' }
 });
 
 const paymentProofLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000,
   max: 5,
-  keyGenerator: (req) => `payment-proof:${req.tenantId}:${req.ip}`,
+  keyGenerator: paymentProofKey,
   message: { ok: false, error: 'Muitos comprovantes enviados. Aguarde uma hora.' }
 });
 

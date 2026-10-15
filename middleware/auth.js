@@ -88,7 +88,7 @@ function requireAuth(req, res, next) {
       issuer: 'cardapio-saas',
       audience: process.env.JWT_AUDIENCE || 'cardapio-saas'
     });
-  } catch (e) {
+  } catch {
     return res.status(401).json({ ok: false, error: 'Token inválido ou expirado' });
   }
 

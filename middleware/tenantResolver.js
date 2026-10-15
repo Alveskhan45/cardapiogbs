@@ -1,9 +1,10 @@
+// @ts-check
 /* ============================================================
    middleware/tenantResolver.js — Fase 2 do plano
 
    Descobre QUAL tenant a requisição é. Ordem de resolução:
      1. subdomínio   (cliente.seusaas.com) — exige WILDCARD_DOMAIN
-     2. header       (X-Tenant-ID)
+     2. header        (X-Tenant-ID)
      3. query        (?tenant=slug)
      4. path         (/t/slug/...)
 
@@ -18,11 +19,51 @@
 
 const db = require('../db');
 
+/**
+ * Tenant resolvido (formato vindo do banco).
+ * @typedef {Object} Tenant
+ * @property {string} id
+ * @property {string} name
+ * @property {string} subdomain
+ * @property {string} [slug]
+ * @property {string} plan
+ * @property {'active' | 'trial' | 'pending_approval' | 'suspended' | 'cancelled'} status
+ * @property {Record<string, unknown>} settings
+ * @property {Date | string} created_at
+ * @property {Date | string | null} [trial_ends_at]
+ * @property {Date | string | null} [subscription_expires_at]
+ */
+
+/**
+ * Subconjunto de req usado pelo resolver (evita depender do tipo do Express).
+ * @typedef {Object} ResolverRequest
+ * @property {(name: string) => string | undefined} get
+ * @property {Record<string, string>} query
+ * @property {string} path
+ * @property {string} baseUrl
+ * @property {Tenant} [tenant]
+ * @property {string} [tenantId]
+ * @property {string} [tenantIdentifier]
+ */
+
+/**
+ * Resposta mínima usada nos caminhos de erro do resolver.
+ * @typedef {Object} ResolverResponse
+ * @property {(status: number) => ResolverResponse} status
+ * @property {(body: unknown) => void} json
+ */
+
 const IDENT_RE = /^[a-z0-9][a-z0-9-]{0,98}[a-z0-9]$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CACHE_TTL_MS = 60 * 1000;
-const cache = new Map(); // identifier -> { tenant, at }
+/** @type {Map<string, { tenant: Tenant, at: number }>} */
+const cache = new Map();
 
+/**
+ * Normaliza um identificador de tenant (UUID passa intacto; slug vai a minúsculo).
+ * @param {unknown} v valor cru (header, query, path)
+ * @returns {string | null} identificador válido ou null
+ */
 function normalize(v) {
   const s = String(v || '').trim();
   if (!s) return null;
@@ -34,12 +75,26 @@ function normalize(v) {
 /* Rota que pode responder SEM tenant (Fase 2.2 do plano).
    ATENÇÃO: dentro de app.use('/api', ...) o req.path vem sem o prefixo
    '/api' — por isso montamos o caminho completo com baseUrl. */
+/**
+ * Caminho completo da rota (baseUrl + path).
+ * @param {ResolverRequest} req
+ * @returns {string}
+ */
 function fullPath(req) {
   return (req.baseUrl || '') + (req.path || '');
 }
 
+/**
+ * Rotas que respondem sem tenant (health, super-admin, público).
+ * @param {string} pathname
+ * @returns {boolean}
+ */
 function isTenantlessRoute(pathname) {
   if (pathname === '/api/health' || pathname === '/api/ready' || pathname === '/health') return true;
+  /* Webhooks vêm dos provedores (Stripe/Asaas) sem subdomínio de loja. O
+     tenant é resolvido depois, pelo subscription_id do evento, via pool de
+     superusuário — exigir tenant aqui rejeitaria todo pagamento. */
+  if (pathname.startsWith('/api/webhooks/')) return true;
   if (pathname.startsWith('/api/super-admin/')) return true;
   if (pathname.startsWith('/api/public/tenant/')) return true;
   if (pathname === '/api/public/plans') return true;
@@ -49,6 +104,11 @@ function isTenantlessRoute(pathname) {
   return false;
 }
 
+/**
+ * Extrai o subdomínio do host quando ele termina em .WILDCARD_DOMAIN.
+ * @param {string | undefined} hostname
+ * @returns {string | null}
+ */
 function subdomainFromHost(hostname) {
   const base = String(process.env.WILDCARD_DOMAIN || '').trim().toLowerCase();
   const host = String(hostname || '').split(':')[0].toLowerCase();
@@ -58,26 +118,46 @@ function subdomainFromHost(hostname) {
   return normalize(host.slice(0, -(base.length + 1)));
 }
 
+/**
+ * Lista os identificadores candidatos, na ordem de prioridade.
+ * @param {ResolverRequest} req
+ * @returns {string[]}
+ */
 function candidateIdentifiers(req) {
   const mode = String(process.env.TENANT_RESOLVER || 'auto').toLowerCase();
   const strict = String(process.env.TENANT_STRICT || '0') === '1';
 
   if (strict && mode !== 'auto') {
-    if (mode === 'subdomain') return [subdomainFromHost(req.get('host'))];
-    if (mode === 'header') return [normalize(req.get('x-tenant-id'))];
-    if (mode === 'path') return [normalize((req.path.match(/^\/t\/([^/]+)/) || [])[1])];
+    /* filter(Boolean) remove null/undefined: ramo strict não pode
+       devolver candidato vazio (senão o resolver consultaria com null). */
+    if (mode === 'subdomain') {
+      return /** @type {string[]} */ ([subdomainFromHost(req.get('host'))].filter(Boolean));
+    }
+    if (mode === 'header') {
+      return /** @type {string[]} */ ([normalize(req.get('x-tenant-id'))].filter(Boolean));
+    }
+    if (mode === 'path') {
+      return /** @type {string[]} */ ([normalize((req.path.match(/^\/t\/([^/]+)/) || [])[1])].filter(Boolean));
+    }
     return [];
   }
 
+  /** @type {(string | null)[]} */
   const all = [
     subdomainFromHost(req.get('host')),
     normalize(req.get('x-tenant-id')),
     normalize(req.query && req.query.tenant),
     normalize((req.path.match(/^\/t\/([^/]+)/) || [])[1])
   ];
-  return all.filter(Boolean);
+  return /** @type {string[]} */ (all.filter(Boolean));
 }
 
+/**
+ * Busca o tenant no cache (TTL 60s) ou no banco, aplicando a expiração
+ * de trial/assinatura. `pending_approval` nunca expira.
+ * @param {string} identifier
+ * @returns {Promise<Tenant | null>}
+ */
 async function lookupTenant(identifier) {
   const hit = cache.get(identifier);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
@@ -114,6 +194,11 @@ async function lookupTenant(identifier) {
   return tenant;
 }
 
+/**
+ * Limpa o cache de tenants (um identificador ou todos).
+ * @param {string} [identifier]
+ * @returns {void}
+ */
 function invalidateTenantCache(identifier) {
   if (!identifier) {
     cache.clear();
@@ -125,6 +210,11 @@ function invalidateTenantCache(identifier) {
 /* Em desenvolvimento não há subdomínio: se existir UMA única loja ativa,
    usamos ela como padrão para que http://localhost:3001 funcione direto.
    Em produção (NODE_ENV=production) nunca: o tenant tem que ser explícito. */
+/**
+ * Fallback de desenvolvimento: usa a loja única quando só existe uma.
+ * Em produção ou com DEV_TENANT_FALLBACK=0, nunca.
+ * @returns {Promise<Tenant | null>}
+ */
 async function singleActiveTenant() {
   if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') return null;
   if (String(process.env.DEV_TENANT_FALLBACK || '1') === '0') return null;
@@ -143,6 +233,13 @@ async function singleActiveTenant() {
   return r.rows.length === 1 ? r.rows[0] : null;
 }
 
+/**
+ * Middleware Express: resolve o tenant e injeta em req.
+ * @param {ResolverRequest} req
+ * @param {ResolverResponse} res
+ * @param {() => void} next
+ * @returns {Promise<void>}
+ */
 async function tenantResolver(req, res, next) {
   const identifiers = candidateIdentifiers(req);
   const routePath = fullPath(req);
@@ -181,10 +278,10 @@ async function tenantResolver(req, res, next) {
 
     req.tenant = tenant;
     req.tenantId = tenant.id;
-    req.tenantIdentifier = used;
+    req.tenantIdentifier = used || undefined;
     next();
   } catch (e) {
-    console.error('[tenantResolver]', e.message);
+    console.error('[tenantResolver]', e instanceof Error ? e.message : String(e));
     res.status(500).json({ ok: false, error: 'Erro ao resolver tenant' });
   }
 }

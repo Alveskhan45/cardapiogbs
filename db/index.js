@@ -15,7 +15,7 @@
 
 const { Pool } = require('pg');
 
-try { process.loadEnvFile && process.loadEnvFile(); } catch (e) { /* .env é opcional */ }
+try { process.loadEnvFile && process.loadEnvFile(); } catch { /* .env é opcional */ }
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const SUPER_ADMIN_DATABASE_URL = process.env.SUPER_ADMIN_DATABASE_URL || DATABASE_URL;
@@ -41,11 +41,6 @@ async function prepareStatement(pool, sql) {
   await pool.query({ name, text: sql });
   preparedStatements.set(name, true);
   return name;
-}
-
-async function executePrepared(pool, sql, params) {
-  const name = await prepareStatement(pool, sql);
-  return pool.query({ name, text: sql, values: params });
 }
 
 appPool.on('error', e => console.error('[db] erro no pool do app:', e.message));

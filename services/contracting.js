@@ -59,7 +59,7 @@ async function platformPix() {
       name: row.pix_name || '',
       whatsapp: row.support_whatsapp || ''
     };
-  } catch (e) {
+  } catch {
     return { key: '', name: '', whatsapp: '' };
   }
 }

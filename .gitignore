@@ -1,20 +1,26 @@
-# Dependências e arquivos locais — não subir
+# Dependencias e arquivos locais - nao subir
 node_modules/
 
-# Banco de dados local (contém pedidos com dados dos clientes e hash de senha)
+# Banco de dados local (contem pedidos com dados dos clientes e hash de senha)
 data/
 
-# Configurações/senhas
+# Configuracoes e senhas
 .env
 .env.*
-# o template de variáveis precisa ficar no repositório
+# o template de variaveis precisa ficar no repositorio
 !.env.example
 *.local
+
+# Artefatos de teste
+coverage/
+
+# Backups (contém dados de clientes e hash de senha)
+backups/
 
 # Sistema
 .DS_Store
 Thumbs.db
 
-# Logs e artefatos locais
+# Logs
 *.log
 erro.txt

@@ -1,8 +1,9 @@
+// @ts-check
 /* ============================================================
    services/provisioning.js — criação de tenants (Fase 6.3)
 
-  provisionTenant roda em UMA transação no pool super-admin:
-   tenant + admin user + config padrão (+ dados demo) + pasta
+   provisionTenant roda em UMA transação no pool super-admin:
+    tenant + admin user + config padrão (+ dados demo) + pasta
    de assets isolada. Se qualquer passo falhar, nada é criado.
    ============================================================ */
 'use strict';
@@ -14,6 +15,80 @@ const db = require('../db');
 const { hashPass, generatePassword } = require('../lib/passwords');
 const { defaultConfig, demoState } = require('../lib/seed');
 
+/**
+ * Plano comercial do tenant.
+ * @typedef {'free' | 'starter' | 'pro'} PlanId
+ */
+
+/**
+ * Ciclo de vida do tenant.
+ * @typedef {'active' | 'trial' | 'pending_approval' | 'suspended' | 'cancelled'} TenantStatus
+ */
+
+/**
+ * Payload aceito por validate()/provisionTenant() (todos os campos opcionais;
+ * os obrigatórios são detectados e reportados em `errors`).
+ * @typedef {Object} TenantInput
+ * @property {string} [name]
+ * @property {string} [subdomain]
+ * @property {string} [slug]
+ * @property {string} [adminEmail]
+ * @property {PlanId} [plan]
+ * @property {string} [status]
+ * @property {string} [adminPassword]
+ * @property {string} [adminName]
+ * @property {string} [phone]
+ * @property {string} [cnpj]
+ * @property {string} [address]
+ * @property {string} [primaryColor]
+ * @property {string} [slogan]
+ * @property {boolean} [demo]
+ * @property {Record<string, unknown>} [settings]
+ */
+
+/**
+ * Valores normalizados após a validação.
+ * @typedef {Object} TenantValues
+ * @property {string} name
+ * @property {string} subdomain
+ * @property {string} slug
+ * @property {string} adminEmail
+ * @property {PlanId} plan
+ * @property {TenantStatus} status
+ * @property {string} adminName
+ * @property {string} adminPassword
+ * @property {string} phone
+ * @property {string} cnpj
+ * @property {string} address
+ * @property {string} primaryColor
+ */
+
+/**
+ * Tenant criado por provisionTenant().
+ * @typedef {Object} ProvisionedTenant
+ * @property {string} id
+ * @property {string} name
+ * @property {string} subdomain
+ * @property {string} slug
+ * @property {PlanId} plan
+ * @property {TenantStatus} status
+ * @property {Date | null} trial_ends_at
+ * @property {string} cnpj
+ * @property {string} phone
+ * @property {string} address
+ * @property {string} primary_color
+ */
+
+/**
+ * Resultado de provisionTenant().
+ * @typedef {Object} ProvisionResult
+ * @property {string} tenantId
+ * @property {ProvisionedTenant} tenant
+ * @property {string} adminEmail
+ * @property {string} adminPassword
+ * @property {boolean} demo
+ */
+
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const TENANTS_DIR = path.join(DATA_DIR, 'tenants');
 
@@ -24,6 +99,7 @@ const RESERVED_SUBDOMAINS = new Set([
   'mail', 'panel', 'root', 'saas', 'support', 'www'
 ]);
 
+/** @param {string} s texto livre @returns {string} slug normalizado */
 function slugify(s) {
   return String(s || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -33,6 +109,11 @@ function slugify(s) {
     .slice(0, 100);
 }
 
+/**
+ * Valida o payload de criação e devolve os valores normalizados.
+ * @param {TenantInput} data payload bruto
+ * @returns {{ values: TenantValues, errors: string[] }}
+ */
 function validate(data) {
   const errors = [];
   const name = String(data.name || '').trim();
@@ -54,13 +135,15 @@ function validate(data) {
   if (!EMAIL_RE.test(adminEmail)) errors.push('E-mail do admin inválido');
   if (adminEmail.length > 254) errors.push('E-mail do admin muito longo');
 
-  const plan = String(data.plan || 'starter').trim().toLowerCase();
+  /* Validação por lista não estreita string→união, então o cast é
+     necessário após a checagem (o runtime já garantiu o valor). */
+  const plan = /** @type {PlanId} */ (String(data.plan || 'starter').trim().toLowerCase());
   if (!['free', 'starter', 'pro'].includes(plan)) errors.push('Plano inválido');
   
   /* Status inicial baseado no plano:
      - free: trial de 7 dias
      - starter/pro: pending_approval (aguarda super-admin aprovar pagamento) */
-  let status = String(data.status || '').trim().toLowerCase();
+  let status = /** @type {TenantStatus} */ (String(data.status || '').trim().toLowerCase());
   if (!status) {
     status = plan === 'free' ? 'trial' : 'pending_approval';
   }
@@ -98,10 +181,16 @@ function validate(data) {
   return { values, errors };
 }
 
+/** @param {string} tenantId @returns {string} caminho da pasta de produtos do tenant */
 function tenantAssetDir(tenantId) {
   return path.join(TENANTS_DIR, tenantId, 'produtos');
 }
 
+/**
+ * Cria tenant + admin + config (transação única) e devolve as credenciais.
+ * @param {TenantInput} data payload já válido
+ * @returns {Promise<ProvisionResult>}
+ */
 async function provisionTenant(data) {
   const { values: v, errors } = validate(data || {});
   if (errors.length) throw provisioningError(errors.join(' | '));
@@ -130,7 +219,11 @@ async function provisionTenant(data) {
   fs.mkdirSync(path.join(tenantDir, 'exports'), { recursive: true });
 
   try {
-    await db.withSuperTransaction(async ctx => {
+    await db.withSuperTransaction(
+      /**
+       * @param {{ q: (sql: string, params?: unknown[]) => Promise<any> }} ctx
+       */
+      async ctx => {
       await ctx.q(
         `INSERT INTO tenants
            (id, name, subdomain, slug, plan, status, settings, cnpj, phone, address, primary_color, trial_ends_at)
@@ -145,6 +238,7 @@ async function provisionTenant(data) {
         [uuidv4(), tenantId, v.adminEmail, hashPass(adminPassword), v.adminName || v.name]
       );
 
+      /** @type {{ storeName: string, slogan?: string }} */
       const overrides = { storeName: v.name };
       if (data.slogan) overrides.slogan = String(data.slogan).slice(0, 300);
       const cfg = defaultConfig(overrides);
@@ -187,10 +281,17 @@ async function provisionTenant(data) {
   };
 }
 
+/**
+ * Erro de validação de provisioning (com code p/ máquina).
+ * @param {string} message
+ * @param {string} [code]
+ * @returns {Error & { code: string }}
+ */
 function provisioningError(message, code = 'TENANT_INVALID') {
+  /** @type {Error & { code?: string }} */
   const e = new Error(message);
   e.code = code;
-  return e;
+  return /** @type {Error & { code: string }} */ (e);
 }
 
 module.exports = { provisionTenant, provisioningError, tenantAssetDir, slugify, validate, TENANTS_DIR, DATA_DIR };

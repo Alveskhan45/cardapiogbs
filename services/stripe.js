@@ -9,6 +9,14 @@ const Stripe = require('stripe');
 
 /** @type {import('stripe').Stripe | null} */
 let stripe = null;
+
+/**
+ * Cliente HTTP injetável. O SDK aceita um httpClient próprio (contrato em
+ * `HttpClient`), o que permite testar os corpos de requisição sem rede.
+ * @type {any}
+ */
+let httpClient = null;
+
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 
 /**
@@ -36,13 +44,24 @@ const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
  * @property {StripeMetadata} [metadata]
  */
 
+/**
+ * Troca o cliente HTTP do módulo. Passar `null` volta ao padrão do SDK.
+ * Zera o cliente memoizado para que a próxima chamada recrie com o novo.
+ * @param {any} client
+ * @returns {void}
+ */
+function setHttpClient(client) {
+  httpClient = client;
+  stripe = null;
+}
+
 function getStripe() {
   if (!stripe) {
     const key = process.env.STRIPE_SECRET_KEY;
     if (!key) throw new Error('STRIPE_SECRET_KEY não configurado');
     // Sem fixar apiVersion: o SDK aplica a versão com que foi gerado,
     // mantendo runtime e tipos em sincronia.
-    stripe = new Stripe(key);
+    stripe = new Stripe(key, httpClient ? { httpClient } : {});
   }
   return stripe;
 }
@@ -259,5 +278,6 @@ module.exports = {
   createPaymentIntent,
   createPrice,
   handleWebhook,
-  verifyWebhookSignature
+  verifyWebhookSignature,
+  setHttpClient
 };

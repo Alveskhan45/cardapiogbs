@@ -859,7 +859,7 @@ router.post('/tenants/:id/password-reset', async (req, res) => {
     await db.runSuper('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hashPass(nova), u.rows[0].id]);
     await db.runSuper('UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL', [u.rows[0].id]);
     await audit(req, 'password_reset', id, { email: u.rows[0].email });
-    res.json({ ok: true, email: u.rows[0].email, tenant: t.rows[0] });
+    res.json({ ok: true, novaSenha: nova, email: u.rows[0].email, tenant: t.rows[0] });
   } catch (e) {
     console.error('[super.pwreset]', e.message);
     res.status(500).json({ ok: false, error: 'Erro ao redefinir senha' });

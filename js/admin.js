@@ -1359,6 +1359,12 @@ if (pImgBtn) {
     if (fi) fi.click();
   });
 }
+document.querySelectorAll('.js-pick-img').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const fi = $('pImgFile');
+    if (fi) fi.click();
+  });
+});
 
 /* ==================== BANNER DA LOJA ====================
    Segue a mesma convenção da foto do produto: data URL, caminho local (assets/...)

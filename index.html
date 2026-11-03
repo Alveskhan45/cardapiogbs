@@ -9,14 +9,7 @@
 <meta name="theme-color" content="#d90429">
 <link rel="icon" href="data:,">
 
-<script>
-(function(){try{
-  var t = localStorage.getItem('bebidas_cardapio_v6_theme') || 'light';
-  document.documentElement.setAttribute('data-theme', t);
-}catch(e){
-  document.documentElement.setAttribute('data-theme','light');
-}})();
-</script>
+<script src="js/theme-init.js"></script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1066,8 +1059,8 @@ body:has(.admin-view.active){padding-bottom:0; overflow:hidden;}
         Pode ser: emoji (), caminho local (assets/produtos/...) ou link (https://...jpg).
       </small>
       <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
-        <button type="button" class="btn ghost sm" onclick="document.getElementById('pImgFile').click()">Selecionar do PC</button>
-        <button type="button" class="btn ghost sm" onclick="document.getElementById('pImgFile').click()">Selecionar do Celular</button>
+        <button type="button" class="btn ghost sm js-pick-img">Selecionar do PC</button>
+        <button type="button" class="btn ghost sm js-pick-img">Selecionar do Celular</button>
       </div>
     </div>
     <div class="img-preview" id="pImgPreview"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" style="width:42px;height:42px"><path d="M7 8.5h10v7H7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 11.5h6M9 14h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
@@ -1212,7 +1205,7 @@ body:has(.admin-view.active){padding-bottom:0; overflow:hidden;}
         <div class="pix-qr" id="pixQR"></div>
         <div class="pix-line">
           <small>Pague com Pix no app do seu banco usando o código abaixo:</small>
-          <input id="pixCopy" readonly onclick="this.select()">
+          <input id="pixCopy" readonly>
           <button class="btn sm primary icon-text" id="btnCopyPix" style="justify-content:center"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 9.5h9.5A1.5 1.5 0 0 1 20 11v8.5A1.5 1.5 0 0 1 18.5 21H9A1.5 1.5 0 0 1 7.5 19.5V11A1.5 1.5 0 0 1 9 9.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M15 3.5H6.5A1.5 1.5 0 0 0 5 5v9.5A1.5 1.5 0 0 0 6.5 16H7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span>Copiar código</span></button>
         </div>
       </div>

@@ -372,7 +372,7 @@ function renderPixOnSuccess(o) {
     }
   }
   const copy = $('pixCopy');
-  if (copy) copy.value = payload;
+  if (copy) { copy.value = payload; copy.onclick = () => copy.select(); }
   const cb = $('btnCopyPix');
   if (cb) cb.onclick = () => { copyText(payload) ? toast('📋 Código PIX copiado!') : toast('Não foi possível copiar'); };
 }

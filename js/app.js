@@ -404,8 +404,7 @@ function reorderMyOrder(id) {
 
 /* ==================== V2 — BINDINGS EXTRA ==================== */
 function bindExtras() {
-  const btnTheme = $('btnTheme');
-  if (btnTheme) btnTheme.onclick = () => { toggleTheme(); setTheme(currentTheme()); };
+
 
   const btnShare = $('btnShare');
   if (btnShare) btnShare.onclick = shareMenu;

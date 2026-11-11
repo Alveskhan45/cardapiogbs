@@ -1,10 +1,8 @@
-/* CardapioDigital - inicializacao de tema (extraido de index.html).
-   Roda no <head> para aplicar o tema antes do primeiro paint. */
+/* CardapioDigital - inicializacao de tema.
+   Forca sempre o tema claro (modo escuro desativado). */
 (function () {
   try {
-    var t = localStorage.getItem('bebidas_cardapio_v6_theme') || 'light';
-    document.documentElement.setAttribute('data-theme', t);
-  } catch (e) {
-    document.documentElement.setAttribute('data-theme', 'light');
-  }
+    localStorage.removeItem('bebidas_cardapio_v6_theme');
+  } catch (e) {}
+  document.documentElement.setAttribute('data-theme', 'light');
 })();

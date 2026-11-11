@@ -631,14 +631,14 @@ function applyTheme() {
 
 /* ==================== TEMA ==================== */
 const THEME_KEY = KEY + '_theme';
-function currentTheme() { try { return localStorage.getItem(THEME_KEY) || 'light'; } catch(e) { return 'light'; } }
+function currentTheme() { return 'light'; }
 function setTheme(mode) {
-  document.documentElement.setAttribute('data-theme', mode);
-  try { localStorage.setItem(THEME_KEY, mode); } catch(e) {}
+  document.documentElement.setAttribute('data-theme', 'light');
+  try { localStorage.removeItem(THEME_KEY); } catch(e) {}
   const b = $('btnTheme');
-  if (b) b.textContent = mode === 'dark' ? '☀️' : '🌙';
+  if (b) b.remove();
 }
-function toggleTheme() { setTheme(currentTheme() === 'dark' ? 'light' : 'dark'); }
+function toggleTheme() { setTheme('light'); }
 
 const THEMES = [
   { id: 'coral',    name: 'Coral Delivery (Padrão)', primary: '#ff5c39', dark: '#e03e1f', accent: '#ffd166' },

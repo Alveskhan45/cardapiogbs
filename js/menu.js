@@ -52,6 +52,19 @@ function highlight(text, q) {
 function priceNow(p) { return p.promo && p.promoPrice ? p.promoPrice : p.price; }
 
 /**
+ * Retorna as categorias que contêm produtos ativos, respeitando a ordem
+ * definida em state.categories pelo painel administrativo.
+ */
+function getActiveCategories() {
+  const activeProductCats = new Set((state.products || []).filter(p => p.active).map(p => p.category).filter(Boolean));
+  const ordered = (state.categories || []).filter(c => activeProductCats.has(c));
+  activeProductCats.forEach(c => {
+    if (!ordered.includes(c)) ordered.push(c);
+  });
+  return ordered;
+}
+
+/**
  * Barra horizontal de categorias (acima da busca) para seleção rápida.
  * "Todos" volta para o cardápio completo; clicar de novo na categoria ativa
  * também volta para "Todos".
@@ -64,7 +77,7 @@ function renderCatChips() {
   const searching = q.length > 0;
   if (searching) activeCat = null;
 
-  const allCats = [...new Set(state.products.filter(p => p.active).map(p => p.category).filter(Boolean))];
+  const allCats = getActiveCategories();
   if (!allCats.length) { wrap.innerHTML = ''; wrap.classList.add('empty'); return; }
   wrap.classList.remove('empty');
 
@@ -101,7 +114,7 @@ function renderCats() {
   const searching = q.length > 0;
 
   // Todas as categorias existentes
-  const allCats = [...new Set(state.products.filter(p => p.active).map(p => p.category).filter(Boolean))];
+  const allCats = getActiveCategories();
 
   // Pool de produtos que casam com a busca
   const pool = state.products.filter(p =>

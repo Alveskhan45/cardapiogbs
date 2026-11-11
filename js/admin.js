@@ -1584,9 +1584,10 @@ function openProductModal(id) {
     : [...new Set((state.products || []).map(x => x.category).filter(Boolean))];
   // Seed categories como último fallback
   const SEED_CATS = ['Refrigerantes','Sucos','Águas','Produto','Energéticos','Vinhos','Destilados','Combos','Petiscos'];
-  const finalCats = cats.length ? cats : SEED_CATS;
+  const finalCats = (cats.length ? cats : SEED_CATS).slice(); if (p && p.category && !finalCats.includes(p.category)) finalCats.push(p.category);
   const select = $('pCat');
   select.innerHTML = finalCats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if (p && p.category) { select.value = p.category; } else if (finalCats.length) { select.value = finalCats[0]; }
   $('overlayProduct').classList.add('open');
   setTimeout(() => $('pName').focus(), 100);
 }
